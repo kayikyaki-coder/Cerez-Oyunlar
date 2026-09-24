@@ -1,0 +1,17 @@
+{
+  "name": "tbw-tests",
+  "version": "1.0.0",
+  "private": true,
+  "type": "commonjs",
+  "scripts": {
+    "test": "node engine.test.js",
+    "test:sim": "node sim.js",
+    "test:e2e": "node e2e.test.js",
+    "test:campaign": "node campaign-sim.js",
+    "test:e2e-campaign": "node e2e-campaign.js",
+    "test:all": "node engine.test.js && node sim.js && node e2e.test.js && node campaign-sim.js"
+  },
+  "devDependencies": {
+    "playwright-core": "^1.48.0"
+  }
+}

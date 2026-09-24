@@ -1,0 +1,297 @@
+/* Köşe Market — bubbles.css
+   Baloncuk katmanı (#bubble-layer) stilleri. Sahibi: baloncuk ajanı. */
+
+.km-layer {
+  position: absolute; inset: 0; overflow: visible;
+  pointer-events: none;               /* boş alan canvas'a geçsin */
+  --km-s: 1;
+  -webkit-user-select: none; user-select: none;
+  -webkit-touch-callout: none;
+  -webkit-tap-highlight-color: transparent;
+  font-family: var(--font-t, 'Fredoka', ui-rounded, system-ui, sans-serif);
+  z-index: 5;
+}
+.km-layer.km-paused, .km-layer.km-paused * { animation-play-state: paused !important; }
+
+/* ---------- Baloncuk ---------- */
+.km-bub {
+  --d: calc(64px * var(--km-s));
+  position: absolute; width: 0; height: 0;
+  pointer-events: none;
+}
+.km-float {
+  position: absolute; left: 0; top: 0;
+  transform: translate(-50%, -50%);
+  display: flex; flex-direction: column; align-items: center;
+  /* dokunma alanı: en az 56px */
+  min-width: max(56px, calc(var(--d) + 12px));
+  min-height: max(56px, calc(var(--d) + 12px));
+  justify-content: center;
+  pointer-events: auto; cursor: pointer;
+  touch-action: manipulation;
+  animation: km-bob 2.6s ease-in-out infinite;
+  animation-delay: var(--bob-d, 0s);
+}
+.km-shake { position: relative; }
+.km-body {
+  position: relative; width: var(--d); height: var(--d);
+  transition: transform .12s;
+}
+@media (hover: hover) { .km-float:hover .km-body { transform: scale(1.06); } }
+
+.km-core {
+  position: absolute; inset: 0; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  background:
+    radial-gradient(circle at 50% 60%, var(--c1) 0 45%, var(--c2) 100%);
+  border: 3px solid #fff;
+  box-shadow:
+    inset 0 -6px 10px rgba(120, 60, 20, .10),
+    inset 0 5px 8px rgba(255, 255, 255, .75),
+    0 4px 0 rgba(120, 70, 30, .10),
+    0 8px 16px rgba(90, 45, 10, .18);
+}
+/* parlak cam yansıması */
+.km-core::before {
+  content: ''; position: absolute; left: 17%; top: 11%;
+  width: 34%; height: 22%; border-radius: 50%;
+  background: linear-gradient(rgba(255,255,255,.95), rgba(255,255,255,.15));
+  transform: rotate(-28deg); pointer-events: none;
+}
+.km-core::after {
+  content: ''; position: absolute; right: 20%; bottom: 16%;
+  width: 9%; height: 9%; border-radius: 50%;
+  background: rgba(255,255,255,.7); pointer-events: none;
+}
+.km-emoji {
+  font-family: var(--font-emoji, 'Apple Color Emoji', 'Segoe UI Emoji', 'Noto Color Emoji', sans-serif);
+  font-size: calc(var(--d) * .5); line-height: 1;
+  filter: drop-shadow(0 2px 1px rgba(0,0,0,.12));
+  position: relative; z-index: 1;
+}
+
+/* ömür halkası */
+.km-ring {
+  --p: 1; --rc: #54c386;
+  position: absolute; inset: -7px; border-radius: 50%;
+  background: conic-gradient(var(--rc) calc(var(--p) * 360deg), rgba(255,255,255,.7) 0);
+  -webkit-mask: radial-gradient(farthest-side, transparent calc(100% - 6px), #000 calc(100% - 5px));
+          mask: radial-gradient(farthest-side, transparent calc(100% - 6px), #000 calc(100% - 5px));
+  filter: drop-shadow(0 1px 1px rgba(0,0,0,.08));
+}
+
+/* etiket hapı */
+.km-label {
+  margin-top: 9px;
+  max-width: 150px;
+  padding: 2px 9px 3px;
+  background: #fffaf2; color: #3a2a1f;
+  border: 2px solid #ffe2bd; border-radius: 999px;
+  font-family: var(--font-b, 'Nunito', ui-rounded, system-ui, sans-serif); font-weight: 800;
+  font-size: calc(11.5px * min(var(--km-s), 1.1));
+  line-height: 1.2; text-align: center; white-space: nowrap;
+  overflow: hidden; text-overflow: ellipsis;
+  box-shadow: 0 2px 0 rgba(120,70,30,.10);
+}
+.km-regular .km-label { white-space: normal; max-width: 170px; }
+
+/* çok dokunuş noktaları */
+.km-dots {
+  position: absolute; top: -12px; right: -14px; z-index: 2;
+  display: flex; gap: 3px; padding: 3px 5px;
+  background: #fff; border-radius: 999px; border: 2px solid #ffe2bd;
+  box-shadow: 0 2px 0 rgba(120,70,30,.12);
+}
+.km-dots i { width: 8px; height: 8px; border-radius: 50%; background: #eadbc6; display: block; }
+.km-dots i.on { background: #e3502c; box-shadow: inset 0 -2px 0 rgba(0,0,0,.15); }
+.km-dots i.km-dot-pop { animation: km-dot-pop .35s ease; }
+
+/* altın baloncuk */
+.km-gold .km-core {
+  border-color: #fff7d6;
+  box-shadow:
+    inset 0 -6px 10px rgba(180, 110, 0, .18),
+    inset 0 5px 8px rgba(255, 255, 255, .8),
+    0 0 0 3px rgba(255, 214, 90, .45),
+    0 0 18px 4px rgba(255, 200, 60, .55),
+    0 8px 16px rgba(120, 70, 0, .2);
+  animation: km-glow 1.2s ease-in-out infinite;
+}
+.km-gold .km-label { background: #fff5d1; border-color: #ffd66b; color: #8a5a00; }
+.km-sparks { position: absolute; inset: -14px; pointer-events: none; z-index: 3; }
+.km-sparks i {
+  position: absolute; font-style: normal; color: #ffb800; font-size: 17px; line-height: 1;
+  text-shadow: 0 0 6px rgba(255, 230, 140, .9);
+  animation: km-twinkle 1.4s ease-in-out infinite;
+}
+.km-sparks i:nth-child(1) { left: 0; top: 8%; }
+.km-sparks i:nth-child(2) { right: 0; top: 0; font-size: 12px; animation-delay: .35s; }
+.km-sparks i:nth-child(3) { right: 4%; bottom: 10%; animation-delay: .7s; }
+.km-sparks i:nth-child(4) { left: 10%; bottom: 0; font-size: 11px; animation-delay: 1.05s; }
+
+/* durum animasyonları */
+.km-body.km-in { animation: km-pop-in .5s cubic-bezier(.3, 1.6, .5, 1) both; }
+.km-body.km-press { animation: km-press .12s ease-out; }
+.km-body.km-squish { animation: km-squish .34s cubic-bezier(.3, 1.5, .5, 1); }
+.km-urgent .km-shake { animation: km-tremble .12s linear infinite; }
+.km-urgent .km-core { filter: saturate(1.25); }
+.km-dying .km-float { pointer-events: none; }
+.km-bub.km-popped .km-float { animation: km-pop-out .16s ease-out forwards; }
+.km-bub.km-popped .km-label, .km-bub.km-popped .km-dots, .km-bub.km-popped .km-ring { opacity: 0; transition: opacity .05s; }
+.km-bub.km-popped { animation: km-noop .24s forwards; }
+.km-bub.km-deflate .km-float { animation: km-deflate .7s ease-in forwards; }
+.km-bub.km-deflate { animation: km-noop .72s forwards; }
+.km-bub.km-deflate .km-core { filter: grayscale(.6) brightness(.95); transition: filter .4s; }
+.km-bub.km-solved .km-float, .km-bub.km-fade .km-float { animation: km-puff .5s ease-out forwards; }
+.km-bub.km-solved, .km-bub.km-fade { animation: km-noop .52s forwards; }
+
+/* ---------- Efektler ---------- */
+.km-burst { position: absolute; width: 0; height: 0; pointer-events: none; }
+.km-bit {
+  position: absolute; left: 0; top: 0; border-radius: 50%;
+  transform: translate(-50%, -50%);
+  animation: km-bit .7s cubic-bezier(.15, .8, .35, 1) forwards;
+  box-shadow: 0 1px 0 rgba(0,0,0,.08);
+}
+.km-shock {
+  position: absolute; left: 0; top: 0; width: 70px; height: 70px; border-radius: 50%;
+  border: 4px solid rgba(255,255,255,.95);
+  box-shadow: 0 0 0 2px rgba(255, 180, 140, .5);
+  transform: translate(-50%, -50%) scale(.4);
+  animation: km-shock .4s ease-out forwards;
+}
+.km-shock.gold { border-color: #ffe27a; box-shadow: 0 0 12px 2px rgba(255, 200, 60, .7); }
+
+.km-ftxt {
+  position: absolute; pointer-events: none; white-space: nowrap;
+  display: flex; align-items: center; gap: 5px;
+  transform: translate(-50%, -50%);
+  animation: km-rise 1.05s cubic-bezier(.2, .9, .3, 1) forwards;
+  z-index: 10;
+}
+.km-ftxt-main {
+  font-family: var(--font-t, 'Fredoka', ui-rounded, system-ui, sans-serif); font-weight: 700; font-size: 24px;
+  color: #2f9e54;
+  -webkit-text-stroke: 5px #fff; paint-order: stroke fill;
+  text-shadow: 0 3px 0 rgba(47, 158, 84, .25);
+}
+.km-ftxt.gold .km-ftxt-main { color: #e39a00; font-size: 28px; text-shadow: 0 3px 0 rgba(200, 130, 0, .3); }
+.km-ftxt-tag {
+  font-family: var(--font-t, 'Fredoka', ui-rounded, system-ui, sans-serif); font-weight: 700; font-size: 13px; color: #fff;
+  background: linear-gradient(#ff9d5c, #f26b3a); border-radius: 999px; padding: 2px 8px;
+  box-shadow: 0 2px 0 #c9502a; transform: rotate(-6deg);
+}
+.km-ftxt.bad { animation: km-sink 1.2s ease-out forwards; }
+.km-ftxt.bad .km-ftxt-main {
+  font-family: var(--font-b, 'Nunito', ui-rounded, system-ui, sans-serif); font-weight: 800; font-size: 14px; color: #d8452b;
+  -webkit-text-stroke: 4px #fff; text-shadow: none;
+}
+.km-ftxt.helper .km-ftxt-main {
+  font-family: var(--font-b, 'Nunito', ui-rounded, system-ui, sans-serif); font-weight: 800; font-size: 13px; color: #6b5a4a;
+  background: #fffaf2; border: 2px solid #ffe2bd; border-radius: 999px; padding: 2px 9px;
+  -webkit-text-stroke: 0; text-shadow: none; box-shadow: 0 2px 0 rgba(120,70,30,.1);
+}
+
+/* kombo göstergesi */
+.km-combo {
+  --h: 48; --k: 1;
+  position: absolute; left: 50%; top: 6%;
+  transform: translate(-50%, 0) scale(0); opacity: 0;
+  pointer-events: none; z-index: 12;
+}
+.km-combo-txt {
+  display: block;
+  font-family: var(--font-t, 'Fredoka', ui-rounded, system-ui, sans-serif); font-weight: 700;
+  font-size: calc(24px * var(--k) * min(var(--km-s), 1.1));
+  color: #fff; white-space: nowrap;
+  padding: 5px 18px 7px; border-radius: 999px;
+  background: linear-gradient(hsl(calc(var(--h) * 1deg) 96% 66%), hsl(calc((var(--h) - 10) * 1deg) 88% 56%));
+  border: 3px solid #fff;
+  box-shadow: 0 4px 0 hsl(calc((var(--h) - 12) * 1deg) 70% 42%), 0 8px 18px rgba(90, 40, 10, .22);
+  text-shadow: 0 2px 0 rgba(0, 0, 0, .18);
+}
+.km-combo.km-max .km-combo-txt { animation: km-hue 0.6s ease-in-out infinite alternate; }
+.km-combo.km-show { animation: km-combo-in 1.25s cubic-bezier(.3, 1.6, .5, 1) forwards; }
+
+/* ---------- Keyframes ---------- */
+@keyframes km-noop { to { opacity: 1; } }
+@keyframes km-bob {
+  0%, 100% { transform: translate(-50%, -50%); }
+  50% { transform: translate(-50%, calc(-50% - 4px)); }
+}
+@keyframes km-pop-in {
+  0% { transform: scale(0); opacity: 0; }
+  60% { transform: scale(1.14); opacity: 1; }
+  100% { transform: scale(1); }
+}
+@keyframes km-press { 50% { transform: scale(.9); } }
+@keyframes km-squish {
+  0% { transform: scale(1, 1); }
+  25% { transform: scale(1.22, .78); }
+  55% { transform: scale(.9, 1.1); }
+  100% { transform: scale(1, 1); }
+}
+@keyframes km-tremble {
+  0% { transform: translate(0, 0) rotate(0); }
+  25% { transform: translate(-1.5px, .5px) rotate(-3deg); }
+  50% { transform: translate(1.5px, -.5px) rotate(2deg); }
+  75% { transform: translate(-1px, -.5px) rotate(-1deg); }
+}
+@keyframes km-pop-out {
+  0% { transform: translate(-50%, -50%) scale(1); opacity: 1; }
+  35% { transform: translate(-50%, -50%) scale(1.2); opacity: .8; }
+  100% { transform: translate(-50%, -50%) scale(1.28); opacity: 0; }
+}
+@keyframes km-deflate {
+  0% { transform: translate(-50%, -50%) scale(1); opacity: 1; }
+  30% { transform: translate(-50%, -50%) scale(1.06, .9); }
+  100% { transform: translate(-50%, calc(-50% + 16px)) scale(.4, .3); opacity: 0; }
+}
+@keyframes km-puff {
+  0% { transform: translate(-50%, -50%) scale(1); opacity: 1; filter: blur(0); }
+  100% { transform: translate(-50%, calc(-50% - 12px)) scale(1.2); opacity: 0; filter: blur(4px); }
+}
+@keyframes km-bit {
+  0% { transform: translate(-50%, -50%) scale(1.3); opacity: 1; }
+  55% { opacity: 1; }
+  100% { transform: translate(calc(-50% + var(--dx)), calc(-50% + var(--dy) + 14px)) scale(.3); opacity: 0; }
+}
+@keyframes km-shock {
+  0% { transform: translate(-50%, -50%) scale(.4); opacity: 1; }
+  100% { transform: translate(-50%, -50%) scale(1.5); opacity: 0; border-width: 1px; }
+}
+@keyframes km-rise {
+  0% { transform: translate(-50%, -50%) scale(.5); opacity: 0; }
+  18% { transform: translate(-50%, calc(-50% - 10px)) scale(1.15); opacity: 1; }
+  70% { opacity: 1; }
+  100% { transform: translate(-50%, calc(-50% - 46px)) scale(1); opacity: 0; }
+}
+@keyframes km-sink {
+  0% { transform: translate(-50%, -50%) scale(.7); opacity: 0; }
+  15% { transform: translate(-50%, -50%) scale(1); opacity: 1; }
+  75% { opacity: 1; }
+  100% { transform: translate(-50%, calc(-50% + 14px)); opacity: 0; }
+}
+@keyframes km-glow {
+  50% { box-shadow:
+    inset 0 -6px 10px rgba(180, 110, 0, .18), inset 0 5px 8px rgba(255, 255, 255, .8),
+    0 0 0 5px rgba(255, 214, 90, .35), 0 0 26px 8px rgba(255, 200, 60, .6), 0 8px 16px rgba(120, 70, 0, .2); }
+}
+@keyframes km-twinkle {
+  0%, 100% { transform: scale(.4) rotate(0); opacity: .2; }
+  50% { transform: scale(1.2) rotate(45deg); opacity: 1; }
+}
+@keyframes km-dot-pop { 40% { transform: scale(1.8); } }
+@keyframes km-combo-in {
+  0% { transform: translate(-50%, 0) scale(.3) rotate(-8deg); opacity: 0; }
+  18% { transform: translate(-50%, 0) scale(1.12) rotate(2deg); opacity: 1; }
+  30% { transform: translate(-50%, 0) scale(1) rotate(-1deg); }
+  80% { transform: translate(-50%, 0) scale(1); opacity: 1; }
+  100% { transform: translate(-50%, -10px) scale(.95); opacity: 0; }
+}
+@keyframes km-hue { to { filter: hue-rotate(-18deg) brightness(1.08); } }
+
+@media (prefers-reduced-motion: reduce) {
+  .km-float { animation: none; }
+  .km-urgent .km-shake { animation-duration: .3s; }
+}

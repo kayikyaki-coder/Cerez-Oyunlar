@@ -1,0 +1,681 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>Kayıp Şehirler — 1v1</title>
+<style>
+:root{
+  --bg:#0e1116; --bg2:#161b23; --line:#2a323d; --txt:#e6edf3; --dim:#8b96a5;
+  --sari:#d9a520; --mavi:#3b7bd8; --beyaz:#cfd8e3; --yesil:#2fa15c; --kirmizi:#d1453b;
+  --pos:#6ee7a0; --neg:#ff6b6b;
+  --cw:clamp(46px,11vw,62px);
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+body{margin:0;background:var(--bg);color:var(--txt);
+  font-family:system-ui,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+  font-size:14px;overscroll-behavior:none}
+button{font-family:inherit;color:inherit}
+
+header{display:flex;align-items:center;gap:10px;flex-wrap:wrap;
+  padding:8px 12px;background:var(--bg2);border-bottom:1px solid var(--line);position:sticky;top:0;z-index:20}
+header h1{margin:0;font-size:15px;letter-spacing:.5px;font-weight:700}
+header h1 small{color:var(--dim);font-weight:400;letter-spacing:0}
+.hdr-spacer{flex:1}
+.chip{background:#0c1017;border:1px solid var(--line);border-radius:999px;padding:4px 10px;font-size:12px;white-space:nowrap}
+.chip b{font-size:13px}
+.chip.me b{color:#7dd3fc}
+.chip.op b{color:#fca5a5}
+
+#wrap{display:flex;gap:10px;align-items:flex-start;padding:10px;max-width:1200px;margin:0 auto}
+#board{flex:1;min-width:0;display:flex;flex-direction:column;gap:8px}
+
+.zone-title{font-size:11px;letter-spacing:1.4px;color:var(--dim);text-transform:uppercase;
+  display:flex;align-items:center;gap:8px;margin:2px 0}
+.zone-title .tot{margin-left:auto;letter-spacing:0;text-transform:none;font-size:12px}
+
+.cols{display:grid;grid-template-columns:repeat(5,1fr);gap:6px}
+.col{background:#11161d;border:1px solid var(--line);border-radius:8px;padding:4px;
+  min-height:74px;display:flex;flex-direction:column;align-items:center;transition:.12s}
+.col .colhead{display:flex;justify-content:center;align-items:center;gap:4px;width:100%;
+  font-size:11px;font-weight:700;padding-bottom:3px;border-bottom:1px solid var(--line);margin-bottom:4px}
+.col .sc{font-variant-numeric:tabular-nums;font-size:12px}
+.sc.p{color:var(--pos)} .sc.n{color:var(--neg)} .sc.z{color:var(--dim)}
+.stack{display:flex;flex-direction:column;align-items:center;width:100%;padding-bottom:14px}
+.mini{width:100%;max-width:56px;height:19px;margin-bottom:-8px;border-radius:4px;
+  display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:800;
+  border:1px solid rgba(0,0,0,.45);box-shadow:0 1px 2px rgba(0,0,0,.5);color:#0c0f14}
+.mini.inv{font-size:9px;letter-spacing:.5px;background-image:repeating-linear-gradient(45deg,rgba(0,0,0,.22) 0 4px,transparent 4px 8px)}
+.mini:last-child{margin-bottom:0}
+.col.tgt{border-color:#7dd3fc;box-shadow:0 0 0 2px rgba(125,211,252,.28);cursor:pointer}
+.col.tgt:hover{background:#16202b}
+
+.middle{display:grid;grid-template-columns:repeat(6,1fr);gap:6px;
+  background:#11161d;border:1px solid var(--line);border-radius:10px;padding:8px}
+.slot{display:flex;flex-direction:column;align-items:center;gap:4px}
+.slot>.pile{max-width:88px}
+.slot .lbl{font-size:10px;color:var(--dim);letter-spacing:.5px}
+.pile{width:100%;aspect-ratio:.72;border-radius:7px;border:1px dashed var(--line);
+  display:flex;align-items:center;justify-content:center;font-size:11px;color:#3d4652;
+  position:relative;transition:.12s;background:#0c1017}
+.pile.full{border-style:solid;border-color:rgba(0,0,0,.5);color:#0c0f14;font-weight:800;font-size:clamp(15px,4.5vw,20px)}
+.pile.full.inv{font-size:10px;letter-spacing:.5px;
+  background-image:repeating-linear-gradient(45deg,rgba(0,0,0,.22) 0 5px,transparent 5px 10px)}
+.pile .cnt{position:absolute;bottom:2px;right:4px;font-size:9px;font-weight:700;opacity:.65}
+.pile.tgt{border-color:#7dd3fc;box-shadow:0 0 0 2px rgba(125,211,252,.3);cursor:pointer}
+.deckpile{background:linear-gradient(135deg,#1e293b,#0f172a);border:1px solid #33415a;color:#94a3b8;
+  font-weight:700;font-size:clamp(14px,4vw,18px);flex-direction:column;gap:2px}
+.deckpile small{font-size:9px;font-weight:400;opacity:.8}
+
+#hand{display:flex;flex-wrap:wrap;gap:6px;justify-content:center;
+  background:#11161d;border:1px solid var(--line);border-radius:10px;padding:8px;min-height:96px}
+.card{width:var(--cw);aspect-ratio:.68;border-radius:8px;border:2px solid rgba(0,0,0,.45);
+  display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;
+  color:#0c0f14;font-weight:800;cursor:pointer;position:relative;
+  box-shadow:0 2px 5px rgba(0,0,0,.5);transition:transform .12s,box-shadow .12s;user-select:none}
+.card .v{font-size:clamp(18px,5.5vw,24px);line-height:1}
+.card .n{font-size:9px;letter-spacing:.4px;opacity:.75;font-weight:700}
+.card .n2{font-size:8px;letter-spacing:1px;opacity:.85;font-weight:800}
+.card.inv{background-image:repeating-linear-gradient(45deg,rgba(0,0,0,.2) 0 6px,transparent 6px 12px);
+  border-style:double;border-width:4px}
+.card.inv .v{font-size:clamp(17px,5vw,22px);line-height:1}
+.card:hover{transform:translateY(-4px)}
+.card.sel{transform:translateY(-9px);box-shadow:0 0 0 3px #7dd3fc,0 6px 12px rgba(0,0,0,.6)}
+.card.mute{opacity:.35;cursor:default}
+.card.mute:hover{transform:none}
+
+#prompt{text-align:center;font-size:13px;color:var(--dim);min-height:19px;padding:2px}
+#prompt b{color:var(--txt)}
+
+#log{width:230px;flex:0 0 230px;background:#11161d;border:1px solid var(--line);border-radius:10px;
+  padding:8px;max-height:70vh;overflow:auto}
+#log h3{margin:0 0 6px;font-size:11px;letter-spacing:1.4px;color:var(--dim);text-transform:uppercase}
+.li{font-size:12px;padding:3px 4px;border-bottom:1px solid #1c232c;line-height:1.35}
+.li:last-child{border:0}
+.li .who{font-weight:700;font-size:10px;letter-spacing:.5px}
+.li.me .who{color:#7dd3fc} .li.op .who{color:#fca5a5} .li.sys{color:var(--dim);font-style:italic}
+
+#veil{position:fixed;inset:0;background:rgba(6,9,13,.86);display:none;z-index:50;
+  align-items:center;justify-content:center;padding:14px;overflow:auto}
+#veil.on{display:flex}
+.sheet{background:var(--bg2);border:1px solid var(--line);border-radius:14px;padding:16px;
+  width:min(560px,100%);box-shadow:0 20px 60px rgba(0,0,0,.6)}
+.sheet h2{margin:0 0 2px;font-size:18px}
+.sheet .sub{color:var(--dim);font-size:12px;margin-bottom:12px}
+table{width:100%;border-collapse:collapse;font-size:13px;font-variant-numeric:tabular-nums}
+th,td{padding:6px 4px;border-bottom:1px solid #232b35;text-align:right}
+th:first-child,td:first-child{text-align:left}
+th{font-size:11px;color:var(--dim);text-transform:uppercase;letter-spacing:.8px}
+tr.sum td{border-top:2px solid var(--line);border-bottom:0;font-weight:800;font-size:15px;padding-top:9px}
+td .d{color:var(--dim);font-size:11px}
+.big{text-align:center;font-size:16px;font-weight:700;margin:12px 0 4px}
+.btn{display:block;width:100%;margin-top:12px;padding:11px;border-radius:9px;border:0;
+  background:#2563eb;color:#fff;font-size:14px;font-weight:700;cursor:pointer}
+.btn:hover{background:#1d4ed8}
+.btn.alt{background:#334155}.btn.alt:hover{background:#475569}
+.lnk{background:none;border:0;padding:0;font:inherit;color:#7dd3fc;text-decoration:underline;cursor:pointer}
+
+@media(max-width:820px){
+  #wrap{flex-direction:column;padding:8px}
+  #log{width:100%;flex:none;max-height:150px;order:9}
+  :root{--cw:clamp(40px,13vw,56px)}
+  .col{min-height:64px;padding:3px}
+  .mini{height:17px;margin-bottom:-9px}
+  header h1 small{display:none}
+}
+</style>
+</head>
+<body>
+
+<header>
+  <h1>KAYIP ŞEHİRLER <small>— 1v1</small></h1>
+  <div class="chip" id="chHand">El 1/3</div>
+  <div class="chip" id="chDeck">Deste 44</div>
+  <div class="hdr-spacer"></div>
+  <div class="chip me">Sen <b id="chMe">0</b></div>
+  <div class="chip op">Bot <b id="chOp">0</b></div>
+</header>
+
+<div id="wrap">
+  <div id="board">
+    <div class="zone-title">Bot — Seferler <span class="tot" id="totOp"></span></div>
+    <div class="cols" id="colsOp"></div>
+
+    <div class="middle" id="middle"></div>
+
+    <div class="zone-title">Sen — Seferler <span class="tot" id="totMe"></span></div>
+    <div class="cols" id="colsMe"></div>
+
+    <div id="prompt"></div>
+    <div id="hand"></div>
+  </div>
+
+  <div id="log"><h3>Hamle günlüğü</h3><div id="logList"></div></div>
+</div>
+
+<div id="veil"><div class="sheet" id="sheet"></div></div>
+
+<script>
+/* ==== CORE START ==== */
+/* Arayüzden bağımsız oyun çekirdeği: kurallar, puanlama ve bot.
+   sim/lost-cities-sim.mjs bu bloğu dosyadan çıkarıp aynen çalıştırır. */
+
+const COLORS = [
+  { key:'sari',    ad:'Sarı',    hex:'#d9a520' },
+  { key:'mavi',    ad:'Mavi',    hex:'#3b7bd8' },
+  { key:'beyaz',   ad:'Beyaz',   hex:'#cfd8e3' },
+  { key:'yesil',   ad:'Yeşil',   hex:'#2fa15c' },
+  { key:'kirmizi', ad:'Kırmızı', hex:'#d1453b' }
+];
+const NC = COLORS.length;
+
+/* --- rastgelelik (tohumlanabilir, tekrarlanabilir) --- */
+function mulberry32(a){
+  return function(){
+    a |= 0; a = a + 0x6D2B79F5 | 0;
+    let t = Math.imul(a ^ a >>> 15, 1 | a);
+    t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
+    return ((t ^ t >>> 14) >>> 0) / 4294967296;
+  };
+}
+
+/* --- deste --- */
+function makeDeck(rnd){
+  const d = [];
+  for (let ci = 0; ci < NC; ci++){
+    for (let v = 2; v <= 10; v++) d.push({ ci, v, id: COLORS[ci].key + '-' + v });
+    for (let k = 0; k < 3; k++)   d.push({ ci, v: 0, id: COLORS[ci].key + '-y' + k });
+  }
+  for (let i = d.length - 1; i > 0; i--){
+    const j = Math.floor(rnd() * (i + 1));
+    const t = d[i]; d[i] = d[j]; d[j] = t;
+  }
+  return d;
+}
+
+function newState(rnd, startPlayer){
+  const s = {
+    deck: makeDeck(rnd),
+    hands: [[], []],
+    cols: [[], []],
+    discards: [],
+    turn: startPlayer,
+    phase: 'play',          // 'play' -> 'draw'
+    justDiscarded: null,    // aynı turda geri alınamaz
+    over: false
+  };
+  for (let ci = 0; ci < NC; ci++){ s.cols[0].push([]); s.cols[1].push([]); s.discards.push([]); }
+  for (let i = 0; i < 8; i++){ s.hands[0].push(s.deck.pop()); s.hands[1].push(s.deck.pop()); }
+  return s;
+}
+
+/* --- kurallar --- */
+function topValue(col){ return col.length ? col[col.length - 1].v : 0; }
+
+function canPlay(col, card){
+  if (card.v === 0) return !col.some(c => c.v > 0);  // yatırım: sayı kartından sonra olmaz
+  return card.v > topValue(col);                      // kesinlikle büyük
+}
+function canTake(s, ci){
+  const p = s.discards[ci];
+  return p.length > 0 && p[p.length - 1].id !== s.justDiscarded;
+}
+
+/* --- puanlama --- */
+function scoreCol(col){
+  if (!col.length) return 0;
+  let inv = 0, sum = 0;
+  for (const c of col){ if (c.v === 0) inv++; else sum += c.v; }
+  let sc = (sum - 20) * (1 + inv);
+  if (col.length >= 8) sc += 20;
+  return sc;
+}
+function scoreAll(cols){
+  const per = cols.map(scoreCol);
+  return { per, total: per.reduce((a, b) => a + b, 0) };
+}
+
+/* --- hamleler --- */
+function doPlay(s, p, idx){
+  const card = s.hands[p][idx];
+  s.hands[p].splice(idx, 1);
+  s.cols[p][card.ci].push(card);
+  s.phase = 'draw';
+  return card;
+}
+function doDiscard(s, p, idx){
+  const card = s.hands[p][idx];
+  s.hands[p].splice(idx, 1);
+  s.discards[card.ci].push(card);
+  s.justDiscarded = card.id;
+  s.phase = 'draw';
+  return card;
+}
+function endTurn(s){
+  s.justDiscarded = null;
+  s.phase = 'play';
+  if (s.deck.length === 0) s.over = true;   // son kartı çeken turunu tamamlar, el biter
+  else s.turn = 1 - s.turn;
+}
+function doDrawDeck(s, p){
+  const card = s.deck.pop();
+  s.hands[p].push(card);
+  endTurn(s);
+  return card;
+}
+function doTakeDiscard(s, p, ci){
+  const card = s.discards[ci].pop();
+  s.hands[p].push(card);
+  endTurn(s);
+  return card;
+}
+
+/* ================= BOT =================
+   Sezgisel. Her renk için "bu sefere bağlanırsam el sonunda kaç puan olur"
+   tahmini yapar; bir kartın değeri, bu tahmine yaptığı marjinal katkıdır.
+   20 puanlık açılış maliyeti tahminin içinde olduğu için, yeterli desteği
+   olmayan bir sefer kendiliğinden açılmaz. Deste azaldıkça gelecek kart
+   beklentisi düştüğü için bot otomatik olarak yeni sefer açmayı bırakır. */
+
+const BOT = {
+  gelecek:   0.85,  // görülmemiş kartlardan gelecek beklentisinin iskontosu
+  bolusme:   1.0,   // çekiliş bütçesi bölünürken en az kaça bölünsün (odaklanma)
+  acNum:     7.0,   // yeni sefer açmak için gereken marjinal eşik (sayı kartı)
+  acInv:     5.0,   // yeni seferi yatırım kartıyla açmak için eşik
+  oyna:      0.5,   // açık sefere kart koymak için eşik
+  tehlike:   0.55,  // ıskartada rakibe yaramanın cezası
+  cek:       4.0,   // ıskartadan almak için gereken değer (kapalı deste beklentisi)
+  bonusEsik: 7.5    // 8 kart bonusunu tahminde saymaya başlama noktası
+};
+
+function unseenFor(s, p){
+  const seen = new Set();
+  for (const c of s.hands[p]) seen.add(c.id);
+  for (let q = 0; q < 2; q++) for (const col of s.cols[q]) for (const c of col) seen.add(c.id);
+  for (const pile of s.discards) for (const c of pile) seen.add(c.id);
+  const out = [];
+  for (let ci = 0; ci < NC; ci++){
+    for (let v = 2; v <= 10; v++){ const id = COLORS[ci].key + '-' + v; if (!seen.has(id)) out.push({ ci, v, id }); }
+    for (let k = 0; k < 3; k++){ const id = COLORS[ci].key + '-y' + k; if (!seen.has(id)) out.push({ ci, v: 0, id }); }
+  }
+  return out;
+}
+
+/* Kalan çekilişlerden bu renge kaç tanesinin ayrılabileceği.
+   Beş rengin hepsi için aynı iyimserliği aynı anda kullanmak mümkün değil:
+   bütçe, oyuncunun bağlandığı sefer sayısına bölünür. Bu yüzden bot
+   dağılmak yerine az sayıda seferi büyütmeye yönelir. */
+function drawBudget(s, p, ci, ownDraws, cfg){
+  let acik = 0;
+  for (let k = 0; k < NC; k++) if (s.cols[p][k].length) acik++;
+  if (!s.cols[p][ci].length) acik++;          // bu renk de açılacaksa hesaba kat
+  return ownDraws / Math.max(cfg.bolusme, acik);
+}
+
+/* Bir sefer sütununa bağlanılırsa el sonundaki tahmini puan. */
+function projectCol(col, ci, handOfColor, ownDraws, unseen, cfg, budget){
+  let inv = 0, sum = 0, cnt = col.length, top = topValue(col);
+  let hasNum = false;
+  for (const c of col){ if (c.v === 0) inv++; else { sum += c.v; hasNum = true; } }
+
+  const nums = handOfColor.filter(c => c.v > top).sort((a, b) => a.v - b.v);
+  const invs = handOfColor.filter(c => c.v === 0);
+
+  let used = 0;
+  if (!hasNum){ inv += invs.length; cnt += invs.length; used += invs.length; }
+  for (const n of nums){ sum += n.v; cnt++; top = n.v; used++; }
+
+  // gelecekte elimize geçmesi beklenen, bu sütuna oynanabilir kartlar
+  if (budget === undefined) budget = ownDraws;
+  const kalan = Math.max(0, Math.min(ownDraws - used, budget));
+  if (kalan > 0){
+    const useful = unseen.filter(c => c.ci === ci && c.v > top);
+    const pay = Math.min(1, budget / Math.max(1, unseen.length)) * cfg.gelecek;
+    let fc = 0, fs = 0;
+    for (const u of useful){ fc += pay; fs += u.v * pay; }
+    if (fc > kalan){ fs *= kalan / fc; fc = kalan; }
+    sum += fs; cnt += fc;
+  }
+  if (cnt === 0) return 0;
+  let sc = (sum - 20) * (1 + inv);
+  if (cnt >= cfg.bonusEsik) sc += 20;
+  return sc;
+}
+
+/* Elindeki bir kartın, kendi renginin projeksiyonuna marjinal katkısı. */
+/* Henüz açılmamış bir sefer için "hiç açmama" seçeneği her zaman 0 puandır;
+   bu yüzden kapalı sütunların projeksiyonu sıfırın altına inemez. Bu taban
+   olmadan bot, negatif projeksiyonlu bir seferi "kartsız haline göre daha iyi"
+   diye açar ve 20 puanlık maliyeti kendine ödetir. */
+function colValue(col, ci, handOfColor, ownDraws, unseen, cfg, budget){
+  const v = projectCol(col, ci, handOfColor, ownDraws, unseen, cfg, budget);
+  return col.length === 0 ? Math.max(0, v) : v;
+}
+
+function cardWorth(s, p, card, unseen, ownDraws, cfg){
+  const col = s.cols[p][card.ci];
+  const same = s.hands[p].filter(c => c.ci === card.ci && c !== card);
+  const bd   = drawBudget(s, p, card.ci, ownDraws, cfg);
+  const ile  = colValue(col, card.ci, same.concat([card]), ownDraws, unseen, cfg, bd);
+  const siz  = colValue(col, card.ci, same, ownDraws, unseen, cfg, bd);
+  return ile - siz;
+}
+
+function botPlayDecision(s, p, cfg){
+  cfg = cfg || BOT;
+  const hand = s.hands[p];
+  const unseen = unseenFor(s, p);
+  const ownDraws = Math.ceil(s.deck.length / 2);
+
+  let best = null;
+  for (let i = 0; i < hand.length; i++){
+    const card = hand[i];
+    const col = s.cols[p][card.ci];
+    if (!canPlay(col, card)) continue;
+    const same = hand.filter(c => c.ci === card.ci && c !== card);
+    const bd = drawBudget(s, p, card.ci, ownDraws, cfg);
+    // A: kart oynandıktan sonra bağlanılan sefer (artık geri dönüş yok)
+    // B: oynamama seçeneği — sütun boşsa hiç açmamak, yani en kötü 0
+    const A = projectCol(col.concat([card]), card.ci, same, Math.max(0, ownDraws - 1), unseen, cfg, bd);
+    const B = colValue(col, card.ci, same, ownDraws, unseen, cfg, bd);
+    let marj = A - B;
+    const esik = col.length === 0 ? (card.v === 0 ? cfg.acInv : cfg.acNum) : cfg.oyna;
+    if (marj < esik) continue;
+    // eşit değerdeyse önce küçük kartı oyna (artan sıra yüzünden geri dönüşü yok)
+    if (!best || marj > best.marj + 1e-9 || (Math.abs(marj - best.marj) < 1e-9 && card.v < best.card.v)){
+      best = { idx: i, card, marj };
+    }
+  }
+  if (best) return { type: 'play', idx: best.idx, card: best.card };
+
+  // atılacak kart: kendi kaybı en az, rakibe yarayışı en az olan
+  let drop = null;
+  for (let i = 0; i < hand.length; i++){
+    const card = hand[i];
+    const kayip = Math.max(0, cardWorth(s, p, card, unseen, ownDraws, cfg));
+    const oppCol = s.cols[1 - p][card.ci];
+    let tehlike = 0;
+    if (oppCol.length > 0 && canPlay(oppCol, card)){
+      const agirlik = 1 + Math.min(4, oppCol.length) * 0.35;
+      tehlike = (card.v === 0 ? 9 : card.v) * agirlik;
+    } else if (oppCol.length === 0){
+      tehlike = (card.v === 0 ? 5 : card.v) * 0.15;   // henüz açmadı ama açabilir
+    }
+    const skor = kayip + cfg.tehlike * tehlike;
+    if (!drop || skor < drop.skor) drop = { idx: i, card, skor };
+  }
+  return { type: 'discard', idx: drop.idx, card: drop.card };
+}
+
+function botDrawDecision(s, p, cfg){
+  cfg = cfg || BOT;
+  const unseen = unseenFor(s, p);
+  const ownDraws = Math.ceil(s.deck.length / 2);
+  let best = null;
+  for (let ci = 0; ci < NC; ci++){
+    if (!canTake(s, ci)) continue;
+    const card = s.discards[ci][s.discards[ci].length - 1];
+    const val = cardWorth(s, p, card, unseen, ownDraws, cfg);
+    if (val >= cfg.cek && (!best || val > best.val)) best = { ci, val, card };
+  }
+  if (best) return { type: 'take', ci: best.ci, card: best.card };
+  return { type: 'deck' };
+}
+
+/* Tam bir eli bot-bota oynat (simülasyon ve doğrulama için). */
+function playAutoHand(rnd, startPlayer, cfgA, cfgB, onMove){
+  const s = newState(rnd, startPlayer);
+  const cfgs = [cfgA || BOT, cfgB || BOT];
+  let guard = 0;
+  while (!s.over && guard++ < 400){
+    const p = s.turn;
+    const a = botPlayDecision(s, p, cfgs[p]);
+    if (a.type === 'play') doPlay(s, p, a.idx); else doDiscard(s, p, a.idx);
+    const d = botDrawDecision(s, p, cfgs[p]);
+    if (d.type === 'take') doTakeDiscard(s, p, d.ci); else doDrawDeck(s, p);
+    if (onMove) onMove(s, p, a, d);
+  }
+  return {
+    state: s,
+    turns: guard,
+    scores: [scoreAll(s.cols[0]), scoreAll(s.cols[1])]
+  };
+}
+/* ==== CORE END ==== */
+</script>
+
+<script>
+/* ================= ARAYÜZ ================= */
+const ME = 0, OP = 1;
+let G = null;
+
+const $ = id => document.getElementById(id);
+const elColsOp = $('colsOp'), elColsMe = $('colsMe'), elMid = $('middle'),
+      elHand = $('hand'), elPrompt = $('prompt'), elLog = $('logList');
+
+function newGame(){
+  G = { rnd: mulberry32((Math.random() * 1e9) | 0), hand: 0, totals: [0, 0], s: null, sel: -1, busy: false, logs: [] };
+  startHand();
+}
+function startHand(){
+  G.hand++;
+  const first = (G.hand % 2 === 1) ? ME : OP;
+  G.s = newState(G.rnd, first);
+  G.sel = -1; G.busy = false; G.scored = false; G.logs = [];
+  addLog('sys', null, G.hand + '. el başladı — ilk oynayan: ' + (first === ME ? 'sen' : 'bot'));
+  render();
+  if (G.s.turn === OP) setTimeout(botTurn, 700);
+}
+
+function addLog(kind, p, txt){
+  G.logs.unshift({ kind, p, txt });
+  if (G.logs.length > 60) G.logs.pop();
+}
+function cname(ci){ return COLORS[ci].ad; }
+function cardTxt(c){ return cname(c.ci) + ' ' + (c.v === 0 ? 'yatırım' : c.v); }
+
+/* ---- çizim ---- */
+function scoreClass(v){ return v > 0 ? 'p' : (v < 0 ? 'n' : 'z'); }
+
+function drawCols(host, p){
+  host.innerHTML = '';
+  const sel = (p === ME && G.sel >= 0) ? G.s.hands[ME][G.sel] : null;
+  const myTurn = !G.s.over && G.s.turn === ME && G.s.phase === 'play';
+  for (let ci = 0; ci < NC; ci++){
+    const col = G.s.cols[p][ci];
+    const sc = scoreCol(col);
+    const d = document.createElement('div');
+    d.className = 'col';
+    const hit = p === ME && sel && sel.ci === ci && myTurn && canPlay(col, sel);
+    if (hit){ d.classList.add('tgt'); d.onclick = () => humanPlay(); }
+    let stack = '';
+    for (const c of col){
+      stack += '<div class="mini' + (c.v === 0 ? ' inv' : '') + '" style="background:' + COLORS[c.ci].hex + '">'
+             + (c.v === 0 ? 'YAT' : c.v) + '</div>';
+    }
+    d.innerHTML =
+      '<div class="colhead"><span style="color:' + COLORS[ci].hex + '">' + cname(ci) + '</span>'
+      + '<span class="sc ' + scoreClass(sc) + '">' + (sc > 0 ? '+' : '') + sc + '</span></div>'
+      + '<div class="stack">' + stack + '</div>';
+    host.appendChild(d);
+  }
+}
+
+function drawMiddle(){
+  elMid.innerHTML = '';
+  const sel = G.sel >= 0 ? G.s.hands[ME][G.sel] : null;
+  const canDiscard = !G.s.over && G.s.turn === ME && G.s.phase === 'play' && sel;
+  const canDraw    = !G.s.over && G.s.turn === ME && G.s.phase === 'draw';
+  for (let ci = 0; ci < NC; ci++){
+    const pile = G.s.discards[ci];
+    const top = pile.length ? pile[pile.length - 1] : null;
+    const slot = document.createElement('div');
+    slot.className = 'slot';
+    const box = document.createElement('div');
+    box.className = 'pile' + (top ? ' full' : '') + (top && top.v === 0 ? ' inv' : '');
+    if (top) box.style.background = COLORS[ci].hex;
+    box.innerHTML = (top ? (top.v === 0 ? 'YAT' : top.v) : '—')
+                  + (pile.length ? '<span class="cnt">' + pile.length + '</span>' : '');
+    if (canDiscard && sel.ci === ci){ box.classList.add('tgt'); box.onclick = () => humanDiscard(); }
+    else if (canDraw && canTake(G.s, ci)){ box.classList.add('tgt'); box.onclick = () => humanDraw(ci); }
+    slot.appendChild(box);
+    const l = document.createElement('div');
+    l.className = 'lbl'; l.style.color = COLORS[ci].hex; l.textContent = cname(ci);
+    slot.appendChild(l);
+    elMid.appendChild(slot);
+  }
+  const slot = document.createElement('div');
+  slot.className = 'slot';
+  const box = document.createElement('div');
+  box.className = 'pile deckpile';
+  box.innerHTML = G.s.deck.length + '<small>kart</small>';
+  if (canDraw){ box.classList.add('tgt'); box.onclick = () => humanDraw(-1); }
+  slot.appendChild(box);
+  const l = document.createElement('div'); l.className = 'lbl'; l.textContent = 'Kapalı deste';
+  slot.appendChild(l);
+  elMid.appendChild(slot);
+}
+
+function drawHand(){
+  elHand.innerHTML = '';
+  const hand = G.s.hands[ME];
+  const order = hand.map((c, i) => ({ c, i }))
+    .sort((a, b) => a.c.ci - b.c.ci || a.c.v - b.c.v);
+  const active = !G.s.over && G.s.turn === ME && G.s.phase === 'play';
+  for (const { c, i } of order){
+    const d = document.createElement('div');
+    d.className = 'card' + (c.v === 0 ? ' inv' : '') + (i === G.sel ? ' sel' : '') + (active ? '' : ' mute');
+    d.style.background = COLORS[c.ci].hex;
+    d.innerHTML = '<div class="v">' + (c.v === 0 ? '★' : c.v) + '</div>'
+                + (c.v === 0 ? '<div class="n2">YATIRIM</div>' : '')
+                + '<div class="n">' + cname(c.ci) + '</div>';
+    if (active) d.onclick = () => { G.sel = (G.sel === i ? -1 : i); render(); };
+    elHand.appendChild(d);
+  }
+}
+
+function drawLog(){
+  elLog.innerHTML = '';
+  for (const l of G.logs){
+    const d = document.createElement('div');
+    d.className = 'li ' + (l.kind === 'sys' ? 'sys' : (l.p === ME ? 'me' : 'op'));
+    d.innerHTML = (l.kind === 'sys' ? '' : '<span class="who">' + (l.p === ME ? 'SEN' : 'BOT') + '</span> ') + l.txt;
+    elLog.appendChild(d);
+  }
+}
+
+function render(){
+  drawCols(elColsOp, OP);
+  drawCols(elColsMe, ME);
+  drawMiddle();
+  drawHand();
+  drawLog();
+  $('chHand').textContent = 'El ' + G.hand + '/3';
+  $('chDeck').textContent = 'Deste ' + G.s.deck.length + ' kart';
+  $('chMe').textContent = G.totals[ME];
+  $('chOp').textContent = G.totals[OP];
+  const me = scoreAll(G.s.cols[ME]).total, op = scoreAll(G.s.cols[OP]).total;
+  $('totMe').innerHTML = 'bu el: <b style="color:' + (me < 0 ? 'var(--neg)' : 'var(--pos)') + '">' + me + '</b>';
+  $('totOp').innerHTML = 'bu el: <b style="color:' + (op < 0 ? 'var(--neg)' : 'var(--pos)') + '">' + op + '</b>';
+
+  if (G.s.over) elPrompt.innerHTML = 'El bitti. <button class="lnk" id="btnSheet">Puan dökümünü göster</button>';
+  else if (G.s.turn === OP) elPrompt.innerHTML = '<b>Bot düşünüyor…</b>';
+  else if (G.s.phase === 'play')
+    elPrompt.innerHTML = G.sel < 0
+      ? 'Elinden bir kart seç.'
+      : '<b>' + cardTxt(G.s.hands[ME][G.sel]) + '</b> — sefer sütununa koy ya da ıskartaya at (yanan yerler geçerli).';
+  else elPrompt.innerHTML = '<b>Kart çek:</b> kapalı desteden ya da bir ıskarta destesinin üstünden.';
+  const bs = $('btnSheet');
+  if (bs) bs.onclick = () => $('veil').classList.add('on');
+}
+
+/* ---- insan hamleleri ---- */
+function humanPlay(){
+  const c = doPlay(G.s, ME, G.sel);
+  addLog('m', ME, cardTxt(c) + ' kartını sefere koydu');
+  G.sel = -1; render();
+}
+function humanDiscard(){
+  const c = doDiscard(G.s, ME, G.sel);
+  addLog('m', ME, cardTxt(c) + ' kartını ıskartaya attı');
+  G.sel = -1; render();
+}
+function humanDraw(ci){
+  if (ci < 0){ doDrawDeck(G.s, ME); addLog('m', ME, 'kapalı desteden çekti'); }
+  else { const c = doTakeDiscard(G.s, ME, ci); addLog('m', ME, cname(ci) + ' ıskartasından ' + cardTxt(c) + ' aldı'); }
+  render();
+  afterTurn();
+}
+
+/* ---- bot ---- */
+function botTurn(){
+  if (G.s.over) return;
+  const a = botPlayDecision(G.s, OP);
+  if (a.type === 'play'){ doPlay(G.s, OP, a.idx); addLog('m', OP, cardTxt(a.card) + ' kartını sefere koydu'); }
+  else { doDiscard(G.s, OP, a.idx); addLog('m', OP, cardTxt(a.card) + ' kartını ıskartaya attı'); }
+  render();
+  setTimeout(() => {
+    const d = botDrawDecision(G.s, OP);
+    if (d.type === 'take'){ doTakeDiscard(G.s, OP, d.ci); addLog('m', OP, cname(d.ci) + ' ıskartasından ' + cardTxt(d.card) + ' aldı'); }
+    else { doDrawDeck(G.s, OP); addLog('m', OP, 'kapalı desteden çekti'); }
+    render();
+    afterTurn();
+  }, 550);
+}
+function afterTurn(){
+  if (G.s.over){ setTimeout(showHandResult, 450); return; }
+  if (G.s.turn === OP) setTimeout(botTurn, 600);
+}
+
+/* ---- el sonu ekranı ---- */
+function showHandResult(){
+  if (G.scored){ $('veil').classList.add('on'); return; }
+  G.scored = true;
+  const a = scoreAll(G.s.cols[ME]), b = scoreAll(G.s.cols[OP]);
+  G.totals[ME] += a.total; G.totals[OP] += b.total;
+  const son = G.hand >= 3;
+
+  const cell = (col, v) => {
+    if (!col.length) return '<span class="d">—</span>';
+    let inv = 0, sum = 0;
+    for (const c of col){ if (c.v === 0) inv++; else sum += c.v; }
+    const bon = col.length >= 8 ? ' +20' : '';
+    return '<b style="color:' + (v < 0 ? 'var(--neg)' : 'var(--pos)') + '">' + (v > 0 ? '+' : '') + v + '</b>'
+         + '<div class="d">(' + sum + '−20)×' + (1 + inv) + bon + '</div>';
+  };
+  let rows = '';
+  for (let ci = 0; ci < NC; ci++){
+    rows += '<tr><td style="color:' + COLORS[ci].hex + '">' + cname(ci) + '</td>'
+          + '<td>' + cell(G.s.cols[ME][ci], a.per[ci]) + '</td>'
+          + '<td>' + cell(G.s.cols[OP][ci], b.per[ci]) + '</td></tr>';
+  }
+  const kazanan = a.total > b.total ? 'Bu eli sen aldın' : (b.total > a.total ? 'Bu eli bot aldı' : 'Bu el berabere');
+  let final = '';
+  if (son){
+    final = '<div class="big">' + (G.totals[ME] > G.totals[OP] ? '🏆 Oyunu KAZANDIN'
+          : (G.totals[OP] > G.totals[ME] ? 'Oyunu bot kazandı' : 'Oyun berabere'))
+          + ' — ' + G.totals[ME] + ' : ' + G.totals[OP] + '</div>';
+  }
+  $('sheet').innerHTML =
+    '<h2>' + G.hand + '. El Sonucu</h2><div class="sub">' + kazanan + '</div>'
+    + '<table><tr><th>Sefer</th><th>Sen</th><th>Bot</th></tr>' + rows
+    + '<tr class="sum"><td>El toplamı</td>'
+    + '<td style="color:' + (a.total < 0 ? 'var(--neg)' : 'var(--pos)') + '">' + a.total + '</td>'
+    + '<td style="color:' + (b.total < 0 ? 'var(--neg)' : 'var(--pos)') + '">' + b.total + '</td></tr>'
+    + '<tr class="sum"><td>Genel toplam</td><td>' + G.totals[ME] + '</td><td>' + G.totals[OP] + '</td></tr></table>'
+    + final
+    + '<button class="btn" id="btnNext">' + (son ? 'Yeni oyun' : (G.hand + 1) + '. ele geç') + '</button>'
+    + (son ? '' : '<button class="btn alt" id="btnClose">Masayı incele</button>');
+  $('veil').classList.add('on');
+  $('btnNext').onclick = () => {
+    $('veil').classList.remove('on');
+    if (son) newGame(); else startHand();
+  };
+  if (!son) $('btnClose').onclick = () => $('veil').classList.remove('on');
+  render();
+}
+
+newGame();
+</script>
+</body>
+</html>

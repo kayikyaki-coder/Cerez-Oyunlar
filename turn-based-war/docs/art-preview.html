@@ -1,0 +1,378 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Turn Based War — Sanat Önizleme</title>
+<link rel="stylesheet" href="../style.css">
+<style>
+  .pv { width: 100%; max-width: 1200px; padding: 20px 16px 60px; margin: 0 auto; }
+  .pv h2 { margin: 26px 0 10px; border-bottom: 1px solid var(--line); padding-bottom: 6px; }
+  .sprow { display: flex; flex-wrap: wrap; gap: 10px; }
+  .spcell { display: flex; flex-direction: column; align-items: center; gap: 4px; font-size: 10px; color: var(--muted); }
+  .spcell canvas { border: 1px solid var(--line); background: #0f1a12; }
+  .spcell.boss canvas { border-color: var(--enemy); }
+  table.tiles { border-collapse: collapse; font-size: 10px; color: var(--muted); }
+  table.tiles th, table.tiles td { padding: 2px 3px; text-align: center; }
+  table.tiles canvas { display: block; }
+  .ui-demo { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; align-items: start; }
+  .ui-demo > div { min-width: 0; }
+  .swatches { display: flex; flex-wrap: wrap; gap: 6px; }
+  .sw { width: 52px; height: 40px; border: 1px solid var(--line); font-size: 9px; display: flex; align-items: flex-end; justify-content: center; color: #fff; text-shadow: 0 0 3px #000; }
+</style>
+</head>
+<body>
+<div class="pv">
+  <h1>Sanat Önizleme <span class="sub">— sprites.js · art.js · style.css · audio.js</span></h1>
+  <div class="muted" id="status">yükleniyor…</div>
+
+  <h2>1. Sprite'lar (2 kare idle, 4× ölçek) — koyu zemin</h2>
+  <div class="sprow" id="sprites"></div>
+
+  <h2>2. Sprite'lar farklı biyom karoları üzerinde (2×, flip = düşman)</h2>
+  <div class="sprow" id="sprites-on-tiles"></div>
+
+  <h2>3. Karolar: 9 biyom × 9 arazi (size=24)</h2>
+  <table class="tiles" id="tiles"></table>
+
+  <h2>4. Örnek harita parçası (forest / crypt / snow)</h2>
+  <div class="sprow" id="maps"></div>
+
+  <h2>5. Portreler (96px)</h2>
+  <div class="sprow" id="portraits"></div>
+
+  <h2>6. Efektler (döngü) ve yüzen yazı</h2>
+  <div class="sprow" id="fx"></div>
+
+  <h2>6b. Saldırı kareleri (attack) ve beyaz flaş (drawSpriteTint)</h2>
+  <div class="sprow" id="attacks"></div>
+
+  <h2>6c. Sahneler: drawTitleScene / drawChapterBanner ×4 / drawCampScene / drawEndingScene</h2>
+  <div class="sprow" id="scenes"></div>
+
+  <h2>7. UI bileşenleri</h2>
+  <div class="ui-demo">
+    <div>
+      <div class="label">Başlık</div>
+      <div class="title-logo" style="font-size:40px">Turn Based War</div>
+      <div class="title-sub">Hex Taktik Macerası</div>
+      <div class="title-menu" style="margin:10px 0 16px">
+        <button class="btn-primary">Yeni Oyun</button>
+        <button>Devam Et</button>
+        <button disabled>Kayıt Yok</button>
+      </div>
+      <div class="label">Butonlar</div>
+      <div class="row" style="flex-wrap:wrap;gap:6px;margin-bottom:14px">
+        <button>Normal</button><button class="active">Aktif</button><button class="btn-primary">Birincil</button>
+        <button class="btn-danger">Tehlike</button><button disabled>Devre dışı</button><span class="gold">120</span>
+        <span class="badge boss">Boss</span><span class="badge new">Yeni</span>
+      </div>
+      <div class="label">Diyalog kutusu</div>
+      <div class="dialog-box">
+        <canvas class="dialog-portrait" id="dlgp" width="96" height="96"></canvas>
+        <div class="dialog-body">
+          <div class="dialog-name">Yaşlı Bilge</div>
+          <div class="dialog-text typing">Kuzeydeki harabelerde bir şeyler kıpırdıyor, {fighter}. Köyün son umudu sizsiniz.</div>
+          <div class="dialog-actions"><span class="dialog-hint">Boşluk: devam</span><button class="btn-primary">Devam ▶</button></div>
+        </div>
+      </div>
+      <div class="choice-list" style="margin-top:8px">
+        <button>Harabelere hemen gidelim.</button>
+        <button>Önce köyde hazırlanalım.</button>
+      </div>
+      <div class="label" style="margin-top:14px">Toast / tooltip</div>
+      <div class="toast" style="position:static;transform:none;animation:none;display:inline-block">Kayıt edildi.</div>
+      <div class="tooltip" style="position:static;display:inline-block;margin-left:8px"><b>Uzun Kılıç</b>1d8 kesme<span class="muted">Çift elle 1d10</span></div>
+    </div>
+    <div>
+      <div class="label">Kampanya haritası (düğüm listesi)</div>
+      <div class="node-list" style="margin-bottom:14px">
+        <div class="node done"><span class="node-title">Kurt Sürüsü</span><span class="node-type">Savaş</span></div>
+        <div class="node done camp"><span class="node-title">Kamp</span><span class="node-type">Kamp</span></div>
+        <div class="node current"><span class="node-title">Haydut Pusu</span><span class="node-type">Savaş</span><button class="btn-primary">Başla</button></div>
+        <div class="node locked optional"><span class="node-title">Örümcek İni</span><span class="node-type">Savaş</span></div>
+        <div class="node locked story"><span class="node-title">Şefin Sırrı</span><span class="node-type">Hikâye</span></div>
+      </div>
+      <div class="label">Mağaza</div>
+      <div class="shop-grid" style="margin-bottom:14px">
+        <div class="item-card" data-type="consumable"><span class="item-type">İksir</span><span class="item-name">İyileşme İksiri</span><span class="desc">2d4+2 HP yeniler.</span><span class="price">25</span><button>Satın al</button></div>
+        <div class="item-card unaffordable" data-type="weapon"><span class="item-type">Silah</span><span class="item-name">+1 Uzun Kılıç</span><span class="desc">İsabet ve hasar +1.</span><span class="price">180</span><button disabled>Satın al</button></div>
+        <div class="item-card" data-type="trinket"><span class="item-type">Tılsım</span><span class="item-name">Kurt Dişi</span><span class="desc">Hız +1.</span><span class="price">60</span><button>Satın al</button></div>
+      </div>
+      <div class="label">Kahraman kartı</div>
+      <div class="hero-card" style="max-width:320px">
+        <div class="hero-top">
+          <canvas class="portrait" id="hcp" width="64" height="64"></canvas>
+          <div class="hero-name"><div class="name">Aldric <span class="level-badge">Sv 3</span></div><div class="cls">FIGHTER</div>
+            <div class="bar-label"><span>HP</span><span>18/24</span></div><div class="hp-bar"><span style="width:75%"></span></div>
+            <div class="bar-label"><span>XP</span><span>420/700</span></div><div class="xp-bar"><span style="width:60%"></span></div>
+          </div>
+        </div>
+        <div class="stat-row"><span class="sname">Might</span><span class="sval">3</span><span class="delta">+1</span></div>
+        <div class="stat-row"><span class="sname">Agility</span><span class="sval">2</span></div>
+        <span class="status buff">Uluma</span><span class="status debuff">Zehir</span>
+      </div>
+      <div class="label" style="margin-top:14px">Envanter / log</div>
+      <ul class="inv-list"><li><span class="name">İyileşme İksiri</span><span class="qty">×3</span><button>Kullan</button></li></ul>
+      <div class="card" style="margin-top:8px"><div class="label">Savaş Günlüğü</div>
+        <div id="log"><div class="round">— Round 2 —</div><div class="dmg">Kurt A, Aldric'e 5 hasar verdi.</div><div class="crit">KRİTİK! Aldric 14 hasar verdi.</div><div class="heal">Mira, Aldric'i 6 iyileştirdi.</div><div class="miss">Goblin ıskaladı.</div><div class="sys">Aldric'in sırası.</div></div></div>
+    </div>
+  </div>
+
+  <h2>7b. Yeni UI: savaş paneli, ipucu, afiş, dmg-tooltip, yardım</h2>
+  <div class="ui-demo">
+    <div>
+      <div class="label">Savaş sağ paneli</div>
+      <aside id="panel" style="width:300px">
+        <div id="turnbox" class="card party"><div class="label">SIRA</div><div id="turnname" class="side-party">Aldric</div><div id="turnround" class="muted">Round 3</div></div>
+        <div id="unitbox" class="card">
+          <div class="unit-head"><canvas class="unit-portrait party" id="up" width="64" height="64"></canvas>
+            <div class="unit-info"><div class="unit-name">Aldric</div><div class="unit-cls">Fighter · Sv 3</div>
+              <div class="bar-label"><span>HP</span><span>18/24</span></div><div class="hp-bar"><span style="width:75%"></span></div>
+              <div class="ap-row">AP <span class="pip">●</span><span class="pip">●</span><span class="pip off">●</span><span class="pip off">●</span></div></div></div>
+          <div id="unitstats"><div class="row"><span>Silah</span><b>Uzun Kılıç 1d8</b></div><div class="row"><span>Kaçınma</span><b>+4</b></div></div>
+          <div id="actions"><button>Hareket</button><button class="active">Saldır</button><button>Büyü</button><button>Yetenek</button><button>Eşya</button><button class="end">Turu Bitir</button></div>
+          <div class="ability-menu open"><div class="spell-title">Yetenekler</div><button class="ability-item"><span class="sp-name">Action Surge</span><span class="sp-meta">1×/savaş</span></button><button class="ability-item used" disabled><span class="sp-name">Second Wind</span><span class="sp-meta">kullanıldı</span></button></div>
+          <div id="hint" class="muted">Hedef seç…</div>
+          <div class="stat-alloc"><div class="stat-row"><span>Might</span><button>−</button><span>3</span><button>+</button></div><div class="stat-row"><span>Agility</span><button>−</button><span>2</span><button>+</button></div><div class="muted">Kalan puan: <span>1</span></div></div>
+        </div>
+        <div id="orderbox" class="card"><div class="label">İNİSİYATİF</div><ol id="orderlist"><li class="now"><span class="side-party">Aldric</span><span class="hp">18/24</span></li><li><span class="side-enemy boss">Haydut Şefi</span><span class="hp">30/30</span></li><li class="dead"><span class="side-enemy">Kurt</span><span class="hp">0</span></li></ol></div>
+        <div id="logbox" class="card"><div class="label">GÜNLÜK</div><div id="log"><div class="dmg">Kurt 5 hasar verdi.</div><div class="sys">Aldric'in sırası.</div></div></div>
+      </aside>
+    </div>
+    <div>
+      <div class="label">dmg-tooltip</div>
+      <div class="dmg-tooltip" style="position:static;display:inline-block"><span class="t-name">Haydut Şefi</span><div class="t-row"><span>İsabet</span><span class="hit-chance mid">%62</span></div><div class="t-row"><span>Hasar</span><b class="dmg-range">4–11</b></div><div class="t-row"><span>HP</span><b>30/30</b></div></div>
+      <div class="label" style="margin-top:14px">tutorial-hint (normalde sağ altta sabit)</div>
+      <div class="tutorial-hint" style="position:static">Bir birime tıklayıp <span class="help-key">2</span> ile saldırı modunu aç. Ormandaki (T) hedefler menzilli saldırıya karşı +2 kaçınma alır.<button class="close">×</button></div>
+      <div class="label" style="margin-top:14px">chapter-banner</div>
+      <div class="chapter-banner" style="height:140px"><canvas id="cb" width="600" height="140"></canvas><div class="chapter-title">Bölüm 2 — Bataklık</div></div>
+      <div class="label" style="margin-top:14px">Yardım (help-panel)</div>
+      <div class="panel help-panel" id="screen-help-demo"><h2>Nasıl Oynanır</h2><div class="card help-page" style="min-height:100px"><h3>Hareket</h3><ul><li><span class="help-key">1</span> Hareket: hız kadar hex, 1 AP.</li><li><span class="help-key">E</span> Turu bitir.</li></ul></div><div class="help-footer"><button>◂ Önceki</button><span class="muted">2 / 5</span><button>Sonraki ▸</button><button class="btn-primary">Kapat</button></div></div>
+    </div>
+  </div>
+
+  <h2>7c. 4. tur UI: büyü seçimi, seviye ızgarası, mağaza rozetleri, sonuç, hikâye alt panel</h2>
+  <div class="spell-choice-grid">
+    <label class="spell-choice selected cantrip"><span class="sc-name">Kutsal Alev</span><span class="sc-meta">Cantrip · 1 AP</span><span class="sc-desc">Menzil 6, 1d8 radyant; save DEX.</span></label>
+    <label class="spell-choice leveled"><span class="sc-name">Kalkan İnancı</span><span class="sc-meta">1. seviye · 2 AP</span><span class="sc-desc">Müttefike 3 tur +2 kaçınma.</span></label>
+    <label class="spell-choice disabled leveled"><span class="sc-name">Uyku</span><span class="sc-meta">1. seviye · 2 AP</span><span class="sc-desc">Alan 1; toplam 5d8 HP'lik düşman uyur.</span></label>
+  </div>
+  <div class="levelup-grid" style="margin:12px 0">
+    <div class="hero-card"><div class="hero-top"><canvas class="portrait" id="lp1" width="48" height="48"></canvas><div><div class="hero-name">Kael <span class="badge-lvl">SEVİYE!</span></div><div class="muted">Fighter 2 → 3 · +7 HP</div></div></div><div class="stat-alloc"><div class="stat-row"><span>Might</span><button>−</button><span>3</span><button>+</button></div><div class="muted">Kalan puan: <span>1</span></div></div></div>
+    <div class="hero-card"><div class="hero-top"><canvas class="portrait" id="lp2" width="48" height="48"></canvas><div><div class="hero-name">Bran</div><div class="muted">Cleric 2 → 3</div></div></div><div class="spell-choice-grid"><label class="spell-choice"><span class="sc-name">Kutsama</span><span class="sc-meta">1. seviye</span></label></div></div>
+    <div class="hero-card"><div class="hero-top"><canvas class="portrait" id="lp3" width="48" height="48"></canvas><div><div class="hero-name">Lira</div><div class="muted">Wizard 2 → 3</div></div></div><div class="feature">Yeni: <b>Arcane Recovery</b></div></div>
+  </div>
+  <div class="shop-grid" style="margin-bottom:12px">
+    <div class="item-card"><span class="item-type consumable">İksir</span><b>İyileşme İksiri</b><div class="item-stats"><span>İyileşme <b>2d4+2</b></span><span>1 AP</span></div><div><span class="price">25</span><span class="stock">×2</span><button class="btn">Al</button></div></div>
+    <div class="item-card"><span class="item-type bomb">Bomba</span><b>Ateş Bombası</b><div class="item-stats"><span>Hasar <b>2d6</b></span><span>Alan 1</span></div><div><span class="price">35</span><span class="stock">×1</span><button class="btn">Al</button></div></div>
+    <div class="item-card"><span class="item-type weapon">Silah</span><b>+1 Uzun Kılıç</b><div class="item-stats"><span>1d8 <b>+1</b></span></div><div><span class="price">180</span><span class="stock out">×0</span><button class="btn" disabled>Al</button></div></div>
+    <div class="item-card"><span class="item-type armor">Zırh</span><b>Zincir Zırh</b><div class="item-stats"><span>Hasar <b>-%20</b></span></div><div><span class="price">120</span><span class="stock">×1</span><button class="btn">Al</button></div></div>
+    <div class="item-card"><span class="item-type trinket">Tılsım</span><b>Kurt Dişi</b><div class="item-stats"><span>Hız <b>+1</b></span></div><div><span class="price">60</span><span class="stock">×1</span><button class="btn">Al</button></div></div>
+  </div>
+  <div class="panel result-panel" style="text-align:center">
+    <h2 id="resultTitle">ZAFER!</h2>
+    <div class="result-heroes">
+      <div class="hero-card"><canvas class="portrait" id="rp1" width="48" height="48"></canvas><div class="hero-name">Kael <span class="badge-lvl">SEVİYE!</span></div><div class="muted">XP 420/700</div><div class="xp-bar"><span style="width:60%"></span></div></div>
+      <div class="hero-card"><canvas class="portrait" id="rp2" width="48" height="48"></canvas><div class="hero-name">Bran</div><div class="muted">XP 300/700</div><div class="xp-bar"><span style="width:43%"></span></div></div>
+      <div class="hero-card dead"><canvas class="portrait" id="rp3" width="48" height="48"></canvas><div class="hero-name">Lira</div><div class="muted">baygın</div><div class="xp-bar"><span style="width:43%"></span></div></div>
+    </div>
+    <ul class="loot-list"><li class="gold">40 altın</li><li>İyileşme İksiri</li><li>Kurt Dişi</li></ul>
+    <table class="battle-stats"><tr><th>Round</th><td>6</td></tr><tr><th>Verilen hasar</th><td>88</td></tr><tr><th>Kritik</th><td>3</td></tr></table>
+  </div>
+  <div style="position:relative;height:300px;margin-top:12px;overflow:hidden;border:1px solid var(--line)">
+    <canvas id="storyDemo" width="1100" height="300" style="position:absolute;inset:0;width:100%;height:100%"></canvas>
+    <div class="panel story-panel bottom" style="position:absolute;bottom:0;min-height:120px;width:calc(100% - 24px)"><div class="dialog-box"><canvas class="dialog-portrait" id="sp1" width="96" height="96"></canvas><div class="dialog-textwrap"><div class="dialog-name">Kurt Reisi</div><div class="dialog-text typing">Ormanım… benim. Buradan sağ çıkamayacaksınız.</div></div></div></div>
+  </div>
+
+  <h2>8. Biyom paleti</h2>
+  <div id="palette"></div>
+
+  <h2>9. Ses (tıkla)</h2>
+  <div class="row" id="audio-btns" style="flex-wrap:wrap;gap:6px"></div>
+</div>
+
+<script src="../js/hex.js"></script>
+<script src="../js/sprites.js"></script>
+<script src="../js/art.js"></script>
+<script src="../js/audio.js"></script>
+<script>
+(function () {
+  const BOSS = new Set(["bandit_chief", "giant_spider", "bog_troll", "knight_fallen", "lich", "direwolf_alpha"]);
+  const IDS = Object.keys(Sprites);
+  const BIOMES = Object.keys(BIOME_PALETTE);
+  const TERR = ["ground", "road", "forest", "rough", "water", "wall", "bridge", "hazard", "shrine"];
+  const errs = validateSprites();
+  document.getElementById("status").textContent = errs.length ? ("HATA: " + errs.join("; ")) : (IDS.length + " sprite, " + BIOMES.length + " biyom, hata yok.");
+
+  function mk(parent, w, h, label, cls) {
+    const cell = document.createElement("div"); cell.className = "spcell" + (cls ? " " + cls : "");
+    const cv = document.createElement("canvas"); cv.width = w; cv.height = h;
+    cell.appendChild(cv);
+    if (label) { const l = document.createElement("span"); l.textContent = label; cell.appendChild(l); }
+    parent.appendChild(cv.parentNode);
+    const c = cv.getContext("2d"); c.imageSmoothingEnabled = false;
+    return c;
+  }
+
+  // 1. sprites (animated)
+  const spriteCtxs = [];
+  const sp = document.getElementById("sprites");
+  IDS.forEach(id => { spriteCtxs.push({ id, ctx: mk(sp, 72, 76, id, BOSS.has(id) ? "boss" : "") }); });
+
+  // 2. sprites on tiles
+  const sot = document.getElementById("sprites-on-tiles");
+  const sotCtxs = [];
+  IDS.forEach((id, i) => {
+    const b = BIOMES[i % BIOMES.length];
+    const ctx = mk(sot, 56, 56, b);
+    sotCtxs.push({ id, ctx, biome: b, flip: !["fighter", "cleric", "wizard"].includes(id) });
+  });
+
+  // 3. tiles table
+  const tb = document.getElementById("tiles");
+  let html = "<tr><th></th>" + TERR.map(t => "<th>" + t + "</th>").join("") + "</tr>";
+  BIOMES.forEach(b => { html += "<tr><th>" + b + "</th>" + TERR.map(t => '<td><canvas width="50" height="50" data-b="' + b + '" data-t="' + t + '"></canvas></td>').join("") + "</tr>"; });
+  tb.innerHTML = html;
+  tb.querySelectorAll("canvas").forEach((cv, i) => {
+    const c = cv.getContext("2d"); c.imageSmoothingEnabled = false;
+    c.fillStyle = BIOME_PALETTE[cv.dataset.b].bg; c.fillRect(0, 0, 50, 50);
+    drawTile(c, cv.dataset.t, cv.dataset.b, 25, 25, 24, i % 7, Math.floor(i / 7));
+  });
+
+  // 4. sample maps
+  const MAPS = {
+    forest: ["..T.,,..T.", ".TT.,.~~..", "..#.,.=~T.", "....,..~..", ".%%.,+.~^."],
+    crypt:  ["##.,,.##..", "#..,..#.+.", "...,^...#.", ".#.,..%%..", "##.,,.....", ],
+    snow:   ["..TT..~~..", "T..,,.=~%.", "..#.,..~..", ".%..,+.#..", "....,.^..."]
+  };
+  const CH = { ".": "ground", ",": "road", "T": "forest", "%": "rough", "~": "water", "#": "wall", "=": "bridge", "^": "hazard", "+": "shrine" };
+  const mapCtxs = [];
+  for (const b in MAPS) {
+    const rows = MAPS[b], size = 22, W = Math.ceil(size * Math.sqrt(3) * (rows[0].length + 0.5) + 10), H = Math.ceil(size * 1.5 * (rows.length - 1) + size * 2 + 10);
+    const ctx = mk(document.getElementById("maps"), W, H, b);
+    ctx.fillStyle = BIOME_PALETTE[b].bg; ctx.fillRect(0, 0, W, H);
+    const cells = [];
+    rows.forEach((row, r) => { for (let q = 0; q < row.length; q++) {
+      const cx = 5 + size + size * Math.sqrt(3) * (q + 0.5 * (r & 1)), cy = 5 + size + size * 1.5 * r;
+      drawTile(ctx, CH[row[q]], b, cx, cy, size, q, r); cells.push({ q, r, cx, cy, t: CH[row[q]] });
+    } });
+    mapCtxs.push({ ctx, cells, b });
+  }
+
+  // 5. portraits
+  const PORTS = ["narrator", "fighter", "cleric", "wizard", "villager", "elder", "bandit", "witch", "knight", "lich", "merchant", "child", "guard", "priest", "boss_wolf", "boss_troll", "boss_knight", "boss_lich", "bilinmeyen"];
+  PORTS.forEach(id => { const c = mk(document.getElementById("portraits"), 96, 96, id); drawPortrait(c, id, 0, 0, 96); });
+  drawPortrait(document.getElementById("dlgp").getContext("2d"), "elder", 0, 0, 96);
+  drawPortrait(document.getElementById("hcp").getContext("2d"), "fighter", 0, 0, 64);
+
+  // 6. fx
+  const FXS = [
+    { type: "slash", from: { x: 30, y: 60 }, to: { x: 80, y: 60 }, color: "#ffd23f" },
+    { type: "arrow", from: { x: 20, y: 70 }, to: { x: 100, y: 60 }, color: "#fff" },
+    { type: "bolt", from: { x: 20, y: 40 }, to: { x: 100, y: 70 }, color: "#8ef0ff" },
+    { type: "heal", from: { x: 60, y: 60 }, to: { x: 60, y: 60 }, color: "#57c96a" },
+    { type: "explosion", from: { x: 60, y: 60 }, to: { x: 60, y: 60 }, color: "#ff8a2a" },
+    { type: "magic", from: { x: 20, y: 40 }, to: { x: 100, y: 70 }, color: "#c05aff" }
+  ];
+  const fxCtxs = FXS.map(f => ({ f, ctx: mk(document.getElementById("fx"), 120, 100, f.type) }));
+  const ftCtx = mk(document.getElementById("fx"), 120, 100, "floatText");
+
+  // 6b. attack + tint
+  const atk = document.getElementById("attacks");
+  const atkCtxs = IDS.map(id => ({ id, ctx: mk(atk, 72, 76, id) }));
+  // 6c. scenes
+  const scenesEl = document.getElementById("scenes");
+  const sceneCtxs = [
+    { n: "title", f: (c, w, h, t) => drawTitleScene(c, w, h, t), w: 480, h: 270 },
+    { n: "chapter 0 orman", f: (c, w, h, t) => drawChapterBanner(c, w, h, 0, t), w: 480, h: 150 },
+    { n: "chapter 1 bataklık", f: (c, w, h, t) => drawChapterBanner(c, w, h, 1, t), w: 480, h: 150 },
+    { n: "chapter 2 kripta", f: (c, w, h, t) => drawChapterBanner(c, w, h, 2, t), w: 480, h: 150 },
+    { n: "chapter 3 kale", f: (c, w, h, t) => drawChapterBanner(c, w, h, 3, t), w: 480, h: 150 },
+    { n: "camp", f: (c, w, h, t) => drawCampScene(c, w, h, t), w: 480, h: 240 },
+    { n: "ending", f: (c, w, h, t) => drawEndingScene(c, w, h, t), w: 480, h: 240 }
+  ].map(sc => ({ ...sc, ctx: mk(scenesEl, sc.w, sc.h, sc.n) }));
+  drawPortrait(document.getElementById("up").getContext("2d"), "fighter", 0, 0, 64);
+  const cbCtx = document.getElementById("cb").getContext("2d");
+
+  [["lp1","fighter"],["lp2","cleric"],["lp3","wizard"],["rp1","fighter"],["rp2","cleric"],["rp3","wizard"],["sp1","boss_wolf"]].forEach(([id,pid])=>drawPortrait(document.getElementById(id).getContext("2d"), pid, 0, 0, id==="sp1"?96:48));
+  const storyDemo = document.getElementById("storyDemo").getContext("2d");
+  // 8. palette
+  const pal = document.getElementById("palette");
+  BIOMES.forEach(b => {
+    const P = BIOME_PALETTE[b];
+    const row = document.createElement("div"); row.className = "row"; row.style.marginBottom = "4px";
+    const lbl = document.createElement("span"); lbl.className = "muted"; lbl.style.width = "70px"; lbl.textContent = b; row.appendChild(lbl);
+    const sw = document.createElement("div"); sw.className = "swatches";
+    [["bg", P.bg], ["g0", P.ground[0]], ["g1", P.ground[1]], ["road", P.road[0]], ["rough", P.rough[0]], ["water", P.water[0]], ["wall", P.wall[0]], ["canopy", P.canopy[1]], ["glow", P.glow]].forEach(([n, c]) => {
+      const d = document.createElement("div"); d.className = "sw"; d.style.background = c; d.textContent = n; sw.appendChild(d);
+    });
+    row.appendChild(sw); pal.appendChild(row);
+  });
+
+  // 9. audio
+  const ab = document.getElementById("audio-btns");
+  ["click", "move", "hit", "miss", "crit", "heal", "spell", "death", "victory", "defeat", "levelup", "coin", "turn"].forEach(n => {
+    const b = document.createElement("button"); b.textContent = n; b.onclick = () => Audio.play(n); ab.appendChild(b);
+  });
+  ["title", "battle", "boss", "camp", "none"].forEach(n => {
+    const b = document.createElement("button"); b.textContent = "♪ " + n; b.className = "btn-primary"; b.onclick = () => Audio.music(n); ab.appendChild(b);
+  });
+  const mb = document.createElement("button"); mb.textContent = "sessiz"; mb.onclick = () => { Audio.setMuted(!Audio.muted); mb.classList.toggle("active", Audio.muted); }; ab.appendChild(mb);
+
+  // animasyon döngüsü
+  const t0 = performance.now();
+  window.__frame = 0;
+  function loop() {
+    const t = (performance.now() - t0) / 1000;
+    const frame = window.__frameLock != null ? window.__frameLock : Math.floor(t * 2) % 2;
+    window.__frame = frame;
+    spriteCtxs.forEach(s => {
+      s.ctx.fillStyle = "#0f1a12"; s.ctx.fillRect(0, 0, 72, 76);
+      s.ctx.fillStyle = "rgba(0,0,0,0.35)"; s.ctx.beginPath(); s.ctx.ellipse(36, 62, 22, 7, 0, 0, Math.PI * 2); s.ctx.fill();
+      drawSpriteFrame(s.ctx, Sprites[s.id], 36, 44, 4, frame, false);
+    });
+    sotCtxs.forEach(s => {
+      s.ctx.fillStyle = BIOME_PALETTE[s.biome].bg; s.ctx.fillRect(0, 0, 56, 56);
+      drawTile(s.ctx, "ground", s.biome, 28, 28, 26, 3, 4);
+      s.ctx.fillStyle = "rgba(0,0,0,0.3)"; s.ctx.beginPath(); s.ctx.ellipse(28, 40, 13, 5, 0, 0, Math.PI * 2); s.ctx.fill();
+      drawSpriteFrame(s.ctx, Sprites[s.id], 28, 28, 2, frame, s.flip);
+    });
+    mapCtxs.forEach((m, i) => {
+      const units = [["fighter", 1, 1, false], ["cleric", 1, 3, false], ["wizard", 2, 2, false], [["wolf", "skeleton", "orc_brute"][i], 7, 1, true], [["bandit_chief", "lich", "direwolf_alpha"][i], 8, 3, true]];
+      m.cells.forEach(c => drawTile(m.ctx, c.t, m.b, c.cx, c.cy, 22, c.q, c.r));
+      units.forEach(([id, q, r]) => {
+        const c = m.cells.find(x => x.q === q && x.r === r);
+        m.ctx.fillStyle = "rgba(0,0,0,0.3)"; m.ctx.beginPath(); m.ctx.ellipse(c.cx, c.cy + 11, 12, 5, 0, 0, Math.PI * 2); m.ctx.fill();
+        drawSpriteFrame(m.ctx, Sprites[id], c.cx, c.cy, 2, frame, q > 5);
+      });
+    });
+    const ft = window.__fxLock != null ? window.__fxLock : (t % 1.2) / 1.2;
+    fxCtxs.forEach(x => {
+      x.ctx.fillStyle = "#1a2a1c"; x.ctx.fillRect(0, 0, 120, 100);
+      drawSpriteFrame(x.ctx, Sprites.goblin, x.f.to.x, x.f.to.y + 6, 2, frame, true);
+      if (x.f.from.x !== x.f.to.x) drawSpriteFrame(x.ctx, Sprites.fighter, x.f.from.x, x.f.from.y + 6, 2, frame, false);
+      drawFx(x.ctx, x.f, ft);
+    });
+    ftCtx.fillStyle = "#1a2a1c"; ftCtx.fillRect(0, 0, 120, 100);
+    drawSpriteFrame(ftCtx, Sprites.cleric, 60, 70, 2, frame, false);
+    drawFloatText(ftCtx, "-12", 40, 60, "#ff6a5a", ft);
+    drawFloatText(ftCtx, "+7", 85, 60, "#57c96a", (ft + 0.5) % 1);
+    const atkPhase = window.__frameLock != null ? (window.__frameLock ? 0.6 : 0.2) : (t % 1);
+    atkCtxs.forEach(s => {
+      s.ctx.fillStyle = "#0f1a12"; s.ctx.fillRect(0, 0, 72, 76);
+      s.ctx.fillStyle = "rgba(0,0,0,0.35)"; s.ctx.beginPath(); s.ctx.ellipse(36, 62, 22, 7, 0, 0, Math.PI * 2); s.ctx.fill();
+      if (atkPhase < 0.5) drawSpriteFrame(s.ctx, Sprites[s.id], 36, 44, 4, "attack", false);
+      else drawSpriteTint(s.ctx, Sprites[s.id], 36, 44, 4, 0, false, "#ffffff", 0.75);
+    });
+    const st = window.__fxLock != null ? 9.7 : t;
+    sceneCtxs.forEach(sc => sc.f(sc.ctx, sc.w, sc.h, st));
+    drawChapterBanner(cbCtx, 600, 140, 1, st);
+    drawChapterBanner(storyDemo, 1100, 300, 0, st);
+    requestAnimationFrame(loop);
+  }
+  loop();
+})();
+</script>
+</body>
+</html>

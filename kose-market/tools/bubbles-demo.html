@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Baloncuk Demo — Köşe Market</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@400;500;600;700&family=Nunito:wght@600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../bubbles.css">
+<style>
+  /* Sadece demo için: baloncuk katmanını yalıtılmış test etmek */
+  *{box-sizing:border-box;margin:0;padding:0;}
+  body{font-family:'Nunito',sans-serif;background:#fff3e0;color:#3a2a1f;padding:14px;}
+  h1{font-family:'Fredoka',sans-serif;color:#e3502c;font-size:22px;margin-bottom:8px;}
+  .stage{position:relative;width:100%;max-width:960px;aspect-ratio:960/540;border-radius:18px;overflow:hidden;
+    border:3px solid #fff;box-shadow:0 6px 0 rgba(0,0,0,.08);
+    background:linear-gradient(#cfeaf7 0 52%,#f4e0c2 52% 100%);}
+  .stage::before{content:'';position:absolute;left:0;right:0;bottom:0;height:48%;
+    background:repeating-linear-gradient(45deg,#e9cfa6 0 14px,#e0c397 14px 28px);}
+  .stage::after{content:'';position:absolute;left:0;right:0;top:0;height:34px;
+    background:repeating-linear-gradient(90deg,#e3502c 0 36px,#fff4e6 36px 72px);}
+  .shelf{position:absolute;left:4%;top:20%;width:36%;height:34%;background:#9a6438;border-radius:10px;box-shadow:inset 0 -8px 0 #71472a;}
+  .desk{position:absolute;left:52%;top:56%;width:22%;height:22%;background:#9a6438;border-radius:10px;box-shadow:inset 0 -8px 0 #71472a;}
+  .door{position:absolute;right:4%;top:18%;width:12%;height:62%;background:#b9dff2;border:6px solid #9a6438;border-radius:10px 10px 0 0;}
+  #bubble-layer{position:absolute;inset:0;}
+  .bar{display:flex;flex-wrap:wrap;gap:6px;margin:10px 0;max-width:960px;}
+  button{font-family:'Fredoka',sans-serif;font-weight:600;border:none;border-radius:10px;padding:8px 12px;font-size:14px;
+    color:#fff;background:#2f9e54;box-shadow:0 3px 0 #247c41;cursor:pointer;}
+  button.alt{background:#3b8ed0;box-shadow:0 3px 0 #2c6ea3;}
+  button.warn{background:#e3502c;box-shadow:0 3px 0 #c63d1d;}
+  #log{font-size:13px;opacity:.75;min-height:1.4em;}
+</style>
+</head>
+<body>
+<h1>🫧 Baloncuk Demo</h1>
+<div class="stage" id="stage">
+  <div class="shelf"></div><div class="desk"></div><div class="door"></div>
+  <div id="bubble-layer"></div>
+</div>
+<div class="bar">
+  <button id="bRand">+ Rastgele</button>
+  <button id="bGold">⭐ Altın</button>
+  <button id="bMulti">🧽 Çok dokunuş</button>
+  <button id="bMany">+8 baloncuk</button>
+  <button class="alt" id="bCombo">Kombo flaş</button>
+  <button class="warn" id="bExp">Süre doldu</button>
+  <button class="alt" id="bAuto">Çırak halletti</button>
+  <button class="alt" id="bPause">⏸ Duraklat</button>
+  <button class="warn" id="bClear">Temizle</button>
+  <button class="alt" id="bMute">🔊</button>
+</div>
+<div class="bar">
+  <button class="alt" data-s="pop">pop</button><button class="alt" data-s="coin">coin</button>
+  <button class="alt" data-s="miss">miss</button><button class="alt" data-s="levelUp">levelUp</button>
+  <button class="alt" data-s="dayStart">dayStart</button><button class="alt" data-s="dayEnd">dayEnd</button>
+  <button class="alt" data-s="click">click</button>
+</div>
+<div id="log"></div>
+
+<script>
+  // Sahte veri (gerçek oyunda data.js tanımlar)
+  var BUBBLE_TYPES = {
+    restock: { emoji: "📦", label: "Raf boşaldı!", zone: "shelf", taps: 1, life: 5, reward: 2, penalty: { lostSalesSec: 12 } },
+    clean:   { emoji: "🧽", label: "Yer kirlendi", zone: "floor", taps: 2, life: 6, reward: 2, penalty: { sat: -4 } },
+    stain:   { emoji: "🫗", label: "İnatçı leke", zone: "floor", taps: 3, life: 7, reward: 4, penalty: { sat: -6 } },
+    change:  { emoji: "🪙", label: "Bozuk para lazım", zone: "register", taps: 1, life: 3.5, reward: 3, penalty: { lostCustomers: 1 } },
+    courier: { emoji: "🛵", label: "Kapıda kurye", zone: "door", taps: 1, life: 5, reward: 3, penalty: { money: -5 } },
+    cat:     { emoji: "🐈", label: "Pamuk'u sev", zone: "cat", taps: 1, life: 5, reward: 1, penalty: {} },
+    fridge:  { emoji: "🧊", label: "Kapak açık", zone: "fridge", taps: 1, life: 5, reward: 2, penalty: { sat: -2 } },
+    window:  { emoji: "🌫️", label: "Cam buğulandı", zone: "window", taps: 1, life: 5, reward: 2, penalty: { sat: -2 } },
+    golden:  { emoji: "⭐", label: "Altın baloncuk!", zone: "register", taps: 1, life: 2.5, reward: 12, penalty: {} },
+  };
+  var BALANCE = { comboWindow: 1.3, comboStep: 0.1, comboMax: 2.0 };
+</script>
+<script src="../js/sfx.js"></script>
+<script src="../js/bubbles.js"></script>
+<script>
+  // Sahte motor: Game.run.bubbles + tapBubble kombo mantığı
+  var Game = {
+    run: { bubbles: {}, combo: 1, lastPop: -99, t: 0 },
+    tapBubble: function (id) {
+      var b = this.run.bubbles[id];
+      if (!b) return null;
+      b.tapsLeft--;
+      if (b.tapsLeft > 0) return { popped: false, tapsLeft: b.tapsLeft, reward: 0, combo: this.run.combo };
+      var r = this.run;
+      r.combo = (r.t - r.lastPop < BALANCE.comboWindow) ? Math.min(BALANCE.comboMax, +(r.combo + BALANCE.comboStep).toFixed(2)) : 1;
+      r.lastPop = r.t;
+      delete r.bubbles[id];
+      return { popped: true, tapsLeft: 0, reward: Math.round(BUBBLE_TYPES[b.type].reward * r.combo), combo: r.combo };
+    },
+  };
+  var nextId = 1;
+  var ZONE_POS = { shelf: [200, 170], floor: [380, 420], register: [600, 290], door: [860, 220], cat: [140, 450], fridge: [470, 150], window: [720, 120] };
+
+  function spawnType(type, x, y) {
+    var t = BUBBLE_TYPES[type];
+    var b = { id: "b" + (nextId++), type: type, zone: t.zone, taps: t.taps, tapsLeft: t.taps, life: t.life, age: 0,
+              reward: t.reward, label: t.label, emoji: t.emoji };
+    Game.run.bubbles[b.id] = b;
+    var p = ZONE_POS[t.zone];
+    Bubbles.spawn(b, { x: x != null ? x : p[0] + (Math.random() - .5) * 80, y: y != null ? y : p[1] + (Math.random() - .5) * 50 });
+    return b;
+  }
+  function randomType() {
+    var keys = Object.keys(BUBBLE_TYPES).filter(function (k) { return k !== "golden"; });
+    return keys[(Math.random() * keys.length) | 0];
+  }
+  function anyId() { var k = Object.keys(Game.run.bubbles); return k[(Math.random() * k.length) | 0]; }
+
+  Bubbles.init(document.getElementById("bubble-layer"));
+  Bubbles.onTap = function (id) {
+    var res = Game.tapBubble(id);
+    Bubbles.feedback(id, res);
+    if (res) document.getElementById("log").textContent = JSON.stringify(res);
+  };
+
+  // Döngü: yaş ilerlet, süresi dolanı patlat
+  var paused = false, last = performance.now();
+  window.demoAuto = true;
+  function loop(now) {
+    var dt = Math.min(0.1, (now - last) / 1000); last = now;
+    if (!paused) {
+      Game.run.t += dt;
+      for (var id in Game.run.bubbles) {
+        var b = Game.run.bubbles[id];
+        b.age += dt;
+        if (b.age >= b.life) { delete Game.run.bubbles[id]; Bubbles.expire(id, Math.random() < 0.25); }
+      }
+    }
+    Bubbles.update(dt);
+    requestAnimationFrame(loop);
+  }
+  requestAnimationFrame(loop);
+  setInterval(function () { if (window.demoAuto && !paused && Object.keys(Game.run.bubbles).length < 6) spawnType(Math.random() < .08 ? "golden" : randomType()); }, 1200);
+
+  var $ = function (id) { return document.getElementById(id); };
+  $("bRand").onclick = function () { spawnType(randomType()); };
+  $("bGold").onclick = function () { spawnType("golden"); };
+  $("bMulti").onclick = function () { spawnType("stain"); };
+  $("bMany").onclick = function () { for (var i = 0; i < 8; i++) spawnType(randomType(), 480 + (Math.random() - .5) * 120, 270 + (Math.random() - .5) * 80); };
+  $("bCombo").onclick = function () { Bubbles.comboFlash(+(1 + Math.random()).toFixed(1)); };
+  $("bExp").onclick = function () { var id = anyId(); if (id) { delete Game.run.bubbles[id]; Bubbles.expire(id, false); } };
+  $("bAuto").onclick = function () { var id = anyId(); if (id) { delete Game.run.bubbles[id]; Bubbles.expire(id, true); } };
+  $("bPause").onclick = function () { paused = !paused; Bubbles.setPaused(paused); this.textContent = paused ? "▶ Devam" : "⏸ Duraklat"; };
+  $("bClear").onclick = function () { Game.run.bubbles = {}; Bubbles.clear(); };
+  $("bMute").textContent = Sfx.muted ? "🔇" : "🔊";
+  $("bMute").onclick = function () { Sfx.setMuted(!Sfx.muted); this.textContent = Sfx.muted ? "🔇" : "🔊"; };
+  document.querySelectorAll("[data-s]").forEach(function (btn) {
+    btn.onclick = function () { Sfx[btn.dataset.s](1 + Math.random()); };
+  });
+
+  // Playwright için yardımcılar
+  window.demo = { spawnType: spawnType, Game: Game };
+</script>
+</body>
+</html>

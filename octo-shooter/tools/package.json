@@ -1,0 +1,14 @@
+{
+  "name": "octo-shooter-tools",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Octo-Shooter denge simülatörü + tarayıcı smoke testi",
+  "scripts": {
+    "sim": "node sim.js --runs 50 --strategy all",
+    "sim:json": "node sim.js --runs 200 --seed 1 --strategy all --maxWave 60 --json out.json",
+    "smoke": "node smoke.mjs"
+  },
+  "devDependencies": {
+    "playwright": "1.56.1"
+  }
+}

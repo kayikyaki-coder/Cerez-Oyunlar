@@ -1,0 +1,190 @@
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --bg: #14121c;
+  --bg2: #1d1b28;
+  --card: #24222f;
+  --line: #383548;
+  --text: #e8e6f0;
+  --muted: #9a95ad;
+  --accent: #f5d23e;
+  --party: #5aa9e6;
+  --wolf: #d9534f;
+  --green: #57c96a;
+}
+
+html, body {
+  height: 100%;
+  background: var(--bg);
+  color: var(--text);
+  font-family: "Consolas", "Courier New", monospace;
+  image-rendering: pixelated;
+}
+
+#app {
+  display: flex;
+  gap: 14px;
+  padding: 14px;
+  align-items: flex-start;
+  min-height: 100%;
+}
+
+#arena { flex: 0 0 auto; }
+
+h1 {
+  font-size: 20px;
+  letter-spacing: 2px;
+  margin-bottom: 10px;
+  color: var(--accent);
+}
+h1 .sub { color: var(--muted); font-size: 12px; letter-spacing: 1px; }
+
+canvas {
+  background: #0f1a12;
+  border: 3px solid var(--line);
+  border-radius: 6px;
+  display: block;
+  image-rendering: pixelated;
+  cursor: pointer;
+}
+
+#banner {
+  margin-top: 10px;
+  padding: 8px 12px;
+  background: var(--bg2);
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  font-size: 14px;
+  min-height: 34px;
+}
+
+#panel {
+  width: 300px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.card {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 10px 12px;
+}
+
+.label {
+  font-size: 11px;
+  letter-spacing: 2px;
+  color: var(--muted);
+  margin-bottom: 6px;
+}
+.muted { color: var(--muted); font-size: 12px; }
+
+#turnname { font-size: 18px; font-weight: bold; }
+
+#unitstats { font-size: 13px; line-height: 1.7; margin-bottom: 10px; }
+#unitstats .row { display: flex; justify-content: space-between; }
+.pip { color: var(--accent); }
+.pip.off { color: var(--line); }
+
+#actions { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+button {
+  background: var(--bg2);
+  color: var(--text);
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  padding: 8px 6px;
+  font-family: inherit;
+  font-size: 13px;
+  cursor: pointer;
+}
+button:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); }
+button:disabled { opacity: 0.35; cursor: not-allowed; }
+button.active { border-color: var(--accent); color: var(--accent); background: #2c2a1a; }
+button.end { grid-column: span 2; background: #2a2230; }
+.newbattle { background: #2a2230; }
+
+#hint { margin-top: 8px; min-height: 16px; }
+
+/* Büyü menüsü */
+#spellmenu { display: none; margin-top: 8px; }
+.spell-title { font-size: 11px; letter-spacing: 1px; color: var(--muted); margin-bottom: 6px; }
+.spell-item {
+  display: flex; justify-content: space-between; align-items: center;
+  width: 100%; text-align: left; margin-bottom: 4px; padding: 6px 8px;
+}
+.spell-item .sp-name { font-size: 13px; }
+.spell-item .sp-meta { font-size: 11px; color: var(--muted); }
+
+#orderlist { list-style: none; font-size: 13px; }
+#orderlist li { padding: 3px 6px; border-radius: 3px; display: flex; justify-content: space-between; }
+#orderlist li.now { background: #33301c; color: var(--accent); }
+#orderlist li.dead { opacity: 0.4; text-decoration: line-through; }
+#orderlist .side-party { color: var(--party); }
+#orderlist .side-wolf { color: var(--wolf); }
+
+#log {
+  font-size: 12px;
+  line-height: 1.6;
+  max-height: 200px;
+  overflow-y: auto;
+}
+#log .hit { color: var(--green); }
+#log .miss { color: var(--muted); }
+#log .dmg { color: var(--wolf); }
+#log .heal { color: var(--party); }
+#log .sys { color: var(--accent); }
+
+/* ============ EKİBİNİ KUR EKRANI ============ */
+#screen-create { min-height: 100%; display: flex; justify-content: center; padding: 24px 14px; }
+.create-inner { width: 100%; max-width: 1000px; }
+#screen-create h1 { margin-bottom: 18px; }
+
+#heroes { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; }
+
+.hero-card { background: var(--card); border: 1px solid var(--line); border-radius: 8px; padding: 14px; }
+.hero-top { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+.hero-card canvas.mini { background: #0f1a12; border: 1px solid var(--line); border-radius: 6px; image-rendering: pixelated; }
+.hero-name { flex: 1; }
+.hero-name input {
+  width: 100%; background: var(--bg2); border: 1px solid var(--line); border-radius: 4px;
+  color: var(--text); font-family: inherit; font-size: 15px; padding: 6px 8px;
+}
+.hero-hp { font-size: 12px; color: var(--muted); margin-top: 4px; }
+.hero-hp b { color: var(--green); }
+
+.class-row { display: flex; gap: 5px; margin-bottom: 12px; }
+.class-row button { flex: 1; font-size: 12px; padding: 6px 2px; }
+.class-row button.on { border-color: var(--accent); color: var(--accent); background: #2c2a1a; }
+
+.pts { font-size: 12px; color: var(--muted); margin-bottom: 8px; }
+.pts b { color: var(--accent); font-size: 15px; }
+.pts.done b { color: var(--green); }
+
+.stat-row { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; font-size: 13px; }
+.stat-row .sname { flex: 1; }
+.stat-row .sval { width: 22px; text-align: center; font-weight: bold; color: var(--accent); }
+.stat-row button { width: 28px; padding: 4px 0; }
+.stat-row .sug { color: var(--party); font-size: 11px; }
+
+.create-footer { margin-top: 20px; display: flex; align-items: center; gap: 16px; }
+.startbtn { font-size: 16px; padding: 12px 28px; background: #2a3320; border-color: #4a6a30; letter-spacing: 1px; }
+.startbtn:not(:disabled):hover { border-color: var(--green); color: var(--green); }
+
+.btnrow { display: flex; gap: 8px; }
+.btnrow button { flex: 1; }
+.weap { font-size: 12px; color: var(--muted); margin-top: 8px; }
+
+/* Donanım (silah/zırh/kalkan) */
+.gear { margin-top: 10px; border-top: 1px solid var(--line); padding-top: 10px; }
+.gear-row { display: flex; align-items: center; gap: 8px; margin-bottom: 7px; }
+.gear-row .glabel { flex: 0 0 64px; font-size: 12px; color: var(--muted); }
+.gear-row select {
+  flex: 1; min-width: 0; background: var(--bg2); color: var(--text);
+  border: 1px solid var(--line); border-radius: 4px; padding: 5px 6px;
+  font-family: inherit; font-size: 12px; cursor: pointer;
+}
+.gear-row select:hover { border-color: var(--accent); }
+.shieldlbl { display: block; font-size: 12px; margin-top: 2px; cursor: pointer; }
+.shieldlbl.off { color: var(--muted); cursor: not-allowed; }
+.shieldlbl input { margin-right: 5px; vertical-align: middle; }

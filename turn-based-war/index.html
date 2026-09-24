@@ -1,0 +1,270 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Turn Based War</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' shape-rendering='crispEdges'%3E%3Crect width='16' height='16' fill='%230e0c14'/%3E%3Cpath d='M4 0h1v1h-1zM5 0h1v1h-1zM6 0h1v1h-1zM7 0h1v1h-1zM8 0h1v1h-1zM9 0h1v1h-1zM10 0h1v1h-1zM11 0h1v1h-1zM3 1h1v1h-1zM12 1h1v1h-1zM2 2h1v1h-1zM13 2h1v1h-1zM2 3h1v1h-1zM13 3h1v1h-1zM2 4h1v1h-1zM13 4h1v1h-1zM2 5h1v1h-1zM6 5h1v1h-1zM7 5h1v1h-1zM9 5h1v1h-1zM10 5h1v1h-1zM14 5h1v1h-1zM2 6h1v1h-1zM13 6h1v1h-1zM2 7h1v1h-1zM13 7h1v1h-1zM3 8h1v1h-1zM12 8h1v1h-1zM3 9h1v1h-1zM12 9h1v1h-1zM4 10h1v1h-1zM8 10h1v1h-1zM12 10h1v1h-1zM4 11h1v1h-1zM12 11h1v1h-1zM5 12h1v1h-1zM11 12h1v1h-1zM6 13h1v1h-1zM10 13h1v1h-1zM7 14h1v1h-1zM9 14h1v1h-1zM8 15h1v1h-1z' fill='%23f0c94a'/%3E%3Cpath d='M4 1h1v1h-1zM5 1h1v1h-1zM6 1h1v1h-1zM7 1h1v1h-1zM8 1h1v1h-1zM9 1h1v1h-1zM10 1h1v1h-1zM11 1h1v1h-1zM3 2h1v1h-1zM4 2h1v1h-1zM11 2h1v1h-1zM12 2h1v1h-1zM3 3h1v1h-1zM12 3h1v1h-1zM3 4h1v1h-1zM12 4h1v1h-1zM3 5h1v1h-1zM13 5h1v1h-1zM3 6h1v1h-1zM12 6h1v1h-1zM3 7h1v1h-1zM12 7h1v1h-1zM4 8h1v1h-1zM11 8h1v1h-1zM4 9h1v1h-1zM11 9h1v1h-1zM5 10h1v1h-1zM11 10h1v1h-1zM5 11h1v1h-1zM6 11h1v1h-1zM10 11h1v1h-1zM11 11h1v1h-1zM6 12h1v1h-1zM10 12h1v1h-1zM7 13h1v1h-1zM9 13h1v1h-1zM8 14h1v1h-1z' fill='%235aa9e6'/%3E%3Cpath d='M5 2h1v1h-1zM6 2h1v1h-1zM7 2h1v1h-1zM9 2h1v1h-1zM10 2h1v1h-1zM4 3h1v1h-1zM5 3h1v1h-1zM6 3h1v1h-1zM7 3h1v1h-1zM9 3h1v1h-1zM10 3h1v1h-1zM11 3h1v1h-1zM4 4h1v1h-1zM5 4h1v1h-1zM6 4h1v1h-1zM7 4h1v1h-1zM9 4h1v1h-1zM10 4h1v1h-1zM11 4h1v1h-1zM4 5h1v1h-1zM5 5h1v1h-1zM11 5h1v1h-1zM12 5h1v1h-1zM4 6h1v1h-1zM5 6h1v1h-1zM6 6h1v1h-1zM7 6h1v1h-1zM9 6h1v1h-1zM10 6h1v1h-1zM11 6h1v1h-1zM4 7h1v1h-1zM5 7h1v1h-1zM6 7h1v1h-1zM7 7h1v1h-1zM9 7h1v1h-1zM10 7h1v1h-1zM11 7h1v1h-1zM5 8h1v1h-1zM6 8h1v1h-1zM7 8h1v1h-1zM9 8h1v1h-1zM10 8h1v1h-1zM5 9h1v1h-1zM6 9h1v1h-1zM7 9h1v1h-1zM9 9h1v1h-1zM10 9h1v1h-1zM6 10h1v1h-1zM7 10h1v1h-1zM9 10h1v1h-1zM10 10h1v1h-1zM7 11h1v1h-1zM8 11h1v1h-1zM9 11h1v1h-1zM7 12h1v1h-1zM8 12h1v1h-1zM9 12h1v1h-1zM8 13h1v1h-1z' fill='%23274d86'/%3E%3Cpath d='M8 2h1v1h-1zM8 3h1v1h-1zM8 4h1v1h-1zM8 5h1v1h-1zM8 6h1v1h-1zM8 7h1v1h-1zM8 8h1v1h-1zM8 9h1v1h-1z' fill='%23eef3f8'/%3E%3C/svg%3E">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div id="globalToast" class="toast" style="display:none">
+    <span id="globalToastText"></span>
+    <button id="globalToastClose" class="close btn-close" title="Kapat">×</button>
+  </div>
+  <div id="confirmOverlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:200;align-items:center;justify-content:center">
+    <div class="card" style="max-width:360px;text-align:center">
+      <div id="confirmText" style="margin-bottom:14px"></div>
+      <button id="confirmYes" class="btn btn-danger">Evet</button>
+      <button id="confirmNo" class="btn">Vazgeç</button>
+    </div>
+  </div>
+
+  <!-- ============ BAŞLIK EKRANI ============ -->
+  <div id="screen-title" class="screen">
+    <canvas id="titleCanvas" class="title-canvas"></canvas>
+    <div class="panel title-panel" style="margin-top: 40vh;">
+      <h1>TURN BASED WAR</h1>
+      <div class="sub" id="titleSubtitle"></div>
+      <div class="title-buttons">
+        <button id="btnNewGame" class="btn btn-primary">Yeni Oyun</button>
+        <button id="btnContinue" class="btn" style="display:none">Devam Et</button>
+        <div id="saveSummary" class="muted" style="display:none;font-size:12px;text-align:center"></div>
+        <button id="btnDeleteSave" class="btn btn-danger" style="display:none;font-size:12px">Kaydı Sil</button>
+        <button id="btnOpenSettings" class="btn">Ayarlar</button>
+        <button id="btnOpenHelp" class="btn">? Nasıl Oynanır</button>
+      </div>
+      <div id="settings" class="card" style="display:none">
+        <div class="label">AYARLAR</div>
+        <div class="row"><span>Ses</span><button id="btnMute" class="btn">Açık</button></div>
+        <div class="row"><span>Müzik Sesi</span><input type="range" id="sldMusicVol" min="0" max="100" value="50"></div>
+        <div class="row"><span>Efekt Sesi</span><input type="range" id="sldSfxVol" min="0" max="100" value="75"></div>
+        <div class="row"><span>Animasyon Hızı</span>
+          <button id="btnSpeed1" class="btn">1x</button>
+          <button id="btnSpeed2" class="btn">2x</button>
+          <button id="btnSpeed3" class="btn">Anında</button>
+        </div>
+        <div class="row"><span>Öğretici İpuçları</span><button id="btnTutorialToggle" class="btn">Açık</button></div>
+        <button id="btnCloseSettings" class="btn">Kapat</button>
+      </div>
+      <div class="credits">Tasarım, grafik, kod ve test: <b>Turn Based War ekibi</b> · Claude ile yapıldı</div>
+    </div>
+    <div class="version">v1.0</div>
+  </div>
+
+  <!-- ============ NASIL OYNANIR EKRANI ============ -->
+  <div id="screen-help" class="screen">
+    <div class="panel help-panel">
+      <h2 id="helpPageTitle">Nasıl Oynanır</h2>
+      <div id="helpPageBody" class="card"></div>
+      <div class="help-footer">
+        <button id="btnHelpPrev" class="btn">◂ Önceki</button>
+        <span class="muted" id="helpPageIndex"></span>
+        <button id="btnHelpNext" class="btn">Sonraki ▸</button>
+        <button id="btnHelpClose" class="btn btn-primary">Kapat</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ HİKÂYE / DİYALOG EKRANI ============ -->
+  <div id="screen-story" class="screen">
+    <canvas id="storyCanvas" class="title-canvas"></canvas>
+    <div class="panel story-panel bottom">
+      <div class="dialog-box" id="dialogBox">
+        <canvas class="dialog-portrait" id="dialogPortrait" width="96" height="96"></canvas>
+        <div class="dialog-textwrap">
+          <div class="dialog-name" id="dialogName"></div>
+          <div class="dialog-text" id="dialogText"></div>
+        </div>
+      </div>
+      <div class="story-footer">
+        <button id="btnStorySkip" class="btn muted">Atla ⏭</button>
+        <button id="btnStoryNext" class="btn btn-primary">İlerle ▸</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ EKİBİNİ KUR EKRANI ============ -->
+  <div id="screen-create" class="screen">
+    <div class="create-inner">
+      <h1>EKİBİNİ KUR <span class="sub">— 3 kahraman · her birine 7 puan</span></h1>
+      <div id="heroes"></div>
+      <div class="label" style="text-align:center;margin-top:10px">ZORLUK</div>
+      <div id="createDifficulty" style="display:flex;gap:8px;justify-content:center;margin:6px 0"></div>
+      <div class="create-footer">
+        <div id="create-warn" class="muted"></div>
+        <button id="btnStart" class="startbtn" disabled>YOLCULUĞA BAŞLA ⚔️</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ KAMPANYA HARİTASI ============ -->
+  <div id="screen-map" class="screen">
+    <div class="panel map-panel">
+      <div class="map-header">
+        <h2 id="mapChapterTitle">Bölüm</h2>
+        <div class="map-stats"><span class="gold" id="mapGold">💰 0</span></div>
+      </div>
+      <div class="map-columns">
+        <div class="map-left">
+          <div class="label">EKİP</div>
+          <div class="side-party" id="mapParty"></div>
+        </div>
+        <div class="map-right">
+          <div class="chapter-banner">
+            <canvas id="chapterBannerCanvas"></canvas>
+            <div class="banner-title" id="chapterBannerTitle"></div>
+            <div class="banner-sub" id="chapterBannerNote" style="display:none"></div>
+          </div>
+          <ol class="node-list" id="nodeList"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ KAMP EKRANI ============ -->
+  <div id="screen-camp" class="screen">
+    <canvas id="campCanvas" class="title-canvas"></canvas>
+    <div class="panel camp-panel">
+      <h2 id="campTitle">Kamp</h2>
+      <p class="muted" id="campText"></p>
+      <div class="camp-columns">
+        <div class="camp-col">
+          <div class="label">EKİP</div>
+          <div id="campHeroes"></div>
+        </div>
+        <div class="camp-col">
+          <div class="label">MAĞAZA <span class="gold" id="campGold">💰 0</span></div>
+          <div class="shop-grid" id="shopGrid"></div>
+          <div class="label">ÇANTA</div>
+          <div class="inv-list" id="invList"></div>
+        </div>
+      </div>
+      <div class="camp-footer">
+        <div class="label" style="margin-right:8px">ZORLUK</div>
+        <div id="campDifficulty" style="display:inline-flex;gap:6px;margin-right:12px"></div>
+        <button id="btnCampContinue" class="btn btn-primary">Devam Et ▸</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ SEVİYE ATLAMA EKRANI ============ -->
+  <div id="screen-levelup" class="screen">
+    <div class="panel levelup-panel">
+      <h2>SEVİYE ATLADI!</h2>
+      <div id="levelupList"></div>
+      <button id="btnLevelupContinue" class="btn btn-primary">Devam Et ▸</button>
+    </div>
+  </div>
+
+  <!-- ============ SAVAŞ EKRANI ============ -->
+  <div id="app" class="screen" style="display:none">
+    <div id="arena">
+      <h1>TURN BASED WAR <span class="sub" id="battleTitle">— Savaş</span></h1>
+      <canvas id="board"></canvas>
+      <div id="banner"><span id="bannerText">Savaş başlıyor...</span>
+        <button id="btnFast" class="btn" title="Düşman turunu hızlandır (Space basılı tut)" style="display:none;float:right">⏩ Hızlandır</button>
+      </div>
+      <div id="turnAnnounce" class="turn-banner" style="display:none"></div>
+      <div id="hint-area">
+        <div class="tutorial-hint hidden" id="tutorialToast">
+          <span id="tutorialToastText"></span>
+          <button class="close btn-close" id="tutorialToastClose" title="Kapat">×</button>
+        </div>
+      </div>
+      <div id="logbox" class="card" style="width:100%;box-sizing:border-box;max-height:140px;overflow-y:auto;margin-top:8px">
+        <div class="label">SAVAŞ GÜNLÜĞÜ</div>
+        <div id="log"></div>
+      </div>
+    </div>
+
+    <aside id="panel">
+      <div id="turnbox" class="card">
+        <div class="label">SIRA</div>
+        <div id="turnname">-</div>
+        <div id="turnround" class="muted">Round 1</div>
+      </div>
+
+      <div id="unitbox" class="card">
+        <div class="unit-head">
+          <canvas class="unit-portrait" id="unitPortrait" width="64" height="64"></canvas>
+          <div class="unit-info">
+            <div class="unit-name" id="unitName"></div>
+            <div class="unit-cls" id="unitCls"></div>
+          </div>
+        </div>
+        <div id="unitstats"></div>
+        <div id="actions">
+          <button id="btnMove" title="Hareket (1)">Hareket</button>
+          <button id="btnAttack" title="Saldır (2)">Saldır</button>
+          <button id="btnSpell" title="Büyü (3)">Büyü</button>
+          <button id="btnAbility" title="Yetenek (4)">Yetenek</button>
+          <button id="btnItem" title="Eşya (5)">Eşya</button>
+          <button id="btnEnd" class="end" title="Turu Bitir (E)">Turu Bitir</button>
+        </div>
+        <div id="spellmenu"></div>
+        <div id="abilitymenu"></div>
+        <div id="itemmenu"></div>
+        <div id="hint" class="muted"></div>
+      </div>
+
+      <div id="orderbox" class="card">
+        <div class="label">İNİSİYATİF SIRASI</div>
+        <ol id="orderlist"></ol>
+      </div>
+
+      <div class="btnrow">
+        <button id="btnBattleHelp" class="newbattle" title="Nasıl Oynanır">? Yardım</button>
+        <button id="btnRebuild" class="newbattle" title="Ana Menüye Dön">← Ana Menü</button>
+      </div>
+    </aside>
+    <div class="tooltip" id="hoverTooltip" style="display:none"></div>
+  </div>
+
+  <!-- ============ SAVAŞ SONUCU ============ -->
+  <div id="screen-result" class="screen">
+    <div class="panel result-panel">
+      <h2 id="resultTitle">ZAFER</h2>
+      <div id="resultBody"></div>
+      <div class="result-footer" id="resultFooter"></div>
+    </div>
+  </div>
+
+  <!-- ============ SON EKRANI ============ -->
+  <div id="screen-ending" class="screen">
+    <canvas id="endingCanvas" class="title-canvas"></canvas>
+    <div class="panel ending-panel">
+      <div class="dialog-box" id="endingDialogBox">
+        <canvas class="dialog-portrait" id="endingPortrait" width="96" height="96"></canvas>
+        <div class="dialog-textwrap">
+          <div class="dialog-name" id="endingName"></div>
+          <div class="dialog-text" id="endingText"></div>
+        </div>
+      </div>
+      <div id="endingStats" class="ending-stats"></div>
+      <button id="btnEndingNext" class="btn btn-primary">İlerle ▸</button>
+      <button id="btnEndingMenu" class="btn" style="display:none">Ana Menüye Dön</button>
+      <button id="btnNewGamePlus" class="btn btn-ngplus" style="display:none">Yeni Oyun+</button>
+    </div>
+  </div>
+
+  <script src="js/hex.js"></script>
+  <script src="js/sprites.js"></script>
+  <script src="js/art.js"></script>
+  <script src="js/audio.js"></script>
+  <script src="js/data.js"></script>
+  <script src="js/content/enemies.js"></script>
+  <script src="js/content/items.js"></script>
+  <script src="js/content/progression.js"></script>
+  <script src="js/content/campaign.js"></script>
+  <script src="js/content/help.js"></script>
+  <script src="js/dev-fixtures.js"></script>
+  <script src="js/engine.js"></script>
+  <script src="js/ai.js"></script>
+  <script src="js/render.js"></script>
+  <script src="js/save.js"></script>
+  <script src="js/creation.js"></script>
+  <script src="js/campaign-flow.js"></script>
+  <script src="js/main.js"></script>
+</body>
+</html>

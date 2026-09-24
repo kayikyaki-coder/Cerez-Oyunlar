@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="theme-color" content="#e3502c">
+<title>Köşe Market</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<!-- Fontlar engellemeden yüklenir: çevrimdışıyken sayfa beklemez, yuvarlak sistem fontlarına düşer -->
+<link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@400;500;600;700&family=Nunito:wght@600;700;800;900&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
+<link rel="stylesheet" href="style.css">
+<link rel="stylesheet" href="bubbles.css">
+</head>
+<body>
+<div id="app" data-screen="title">
+
+  <!-- Tente + üst bilgi çubuğu -->
+  <header class="awning" id="awning">
+    <div class="awning-inner">
+      <div class="brand" id="brand">🛒 <span id="brand-name">KÖŞE MARKET</span></div>
+      <div class="topstats" id="topstats">
+        <div class="pill money" title="Kasa"><span class="pill-ic">💰</span><b id="top-money">₺0</b></div>
+        <div class="pill" title="Gün"><span class="pill-ic">📅</span><b id="top-day">Gün 1</b></div>
+        <div class="pill lvl" title="İtibar seviyesi"><span class="pill-ic">⭐</span><b id="top-level">Sv. 1</b></div>
+        <button class="icon-btn" id="btn-settings" aria-label="Ayarlar" title="Ayarlar">⚙️</button>
+      </div>
+    </div>
+  </header>
+
+  <main class="wrap">
+
+    <!-- ===== BAŞLIK ===== -->
+    <section class="screen" id="screen-title">
+      <div class="title-hero">
+        <h1 class="title-logo"><span>Köşe</span> <span>Market</span></h1>
+        <p class="title-sub">Mahallenin en tatlı dükkânı seni bekliyor 🐾</p>
+      </div>
+      <div class="stage-card">
+        <div class="stage-slot" data-slot="title"></div>
+        <div class="pamuk-say" id="title-say">
+          <span class="pamuk-face">🐈</span>
+          <p id="title-line">Miyav! Ben Pamuk.</p>
+        </div>
+      </div>
+      <div class="title-actions">
+        <button class="btn big red" id="btn-continue">▶ Devam Et</button>
+        <button class="btn big cream" id="btn-new">✨ Yeni Oyun</button>
+      </div>
+      <p class="fine"><span class="kbd-hint">Space: devam · </span>Oyun otomatik kaydedilir</p>
+    </section>
+
+    <!-- ===== SABAH ===== -->
+    <section class="screen" id="screen-morning">
+      <div class="morning-top">
+        <div class="stage-card">
+          <div class="stage-slot" data-slot="morning"></div>
+        </div>
+        <div class="daycard" id="daycard"></div>
+      </div>
+
+      <div class="pamuk-tip" id="morning-tip"></div>
+
+      <div class="sec-head"><span>🧺 Stok &amp; Raflar</span><i class="line"></i><span class="sec-note" id="cap-note"></span></div>
+      <div class="fill-row">
+        <button class="btn teal" id="btn-fill">🧮 Dengeli Doldur <small>talebe göre</small></button>
+        <div class="stock-summary" id="stock-summary"></div>
+      </div>
+      <div class="shelf-wood"><div class="stock-grid" id="stock-grid"></div></div>
+
+      <div class="sec-head"><span>📈 Yükseltmeler</span><i class="line"></i></div>
+      <div class="upg-grid" id="upg-grid"></div>
+      <div class="actionbar-spacer"></div>
+
+      <div class="actionbar" id="actionbar">
+        <div class="actionbar-inner">
+          <button class="btn big red open-btn" id="btn-open">Dükkânı Aç ▶<small id="est-play">baloncuklara dokun, kombo yap</small></button>
+          <button class="btn big cream skip-btn" id="btn-skip">Hızlı Geç ⏩<small id="est-skip">baloncuklar çözülmez</small></button>
+          <div class="skip-warn" id="tradeoff">🐈 Oynamak daha kârlı; acelen varsa hızlı geç, dükkân yine açılır.</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ===== GÜN ===== -->
+    <section class="screen" id="screen-day">
+      <div class="hud" id="hud">
+        <div class="hud-cell hud-money"><span class="hud-lab">Kasa</span><b id="hud-money">₺0</b></div>
+        <div class="hud-cell hud-clock">
+          <div class="clock-bar"><i id="hud-clock-fill"></i><span id="hud-clock-sun">☀️</span></div>
+          <span class="hud-lab" id="hud-clock-txt">08:00</span>
+        </div>
+        <div class="hud-cell hud-hearts" title="Memnuniyet"><span id="hud-hearts"></span></div>
+        <div class="hud-cell hud-combo" title="Kombo">
+          <span class="hud-lab">Kombo</span>
+          <div class="combo-meter"><i id="hud-combo-fill"></i><b id="hud-combo-txt">x1.0</b></div>
+        </div>
+        <div class="hud-cell hud-goal" id="hud-goal-cell">
+          <span class="hud-lab" id="hud-goal-txt">🎯 Hedef</span>
+          <div class="goal-bar"><i id="hud-goal-fill"></i><b id="hud-goal-num">0/0</b></div>
+        </div>
+        <div class="hud-cell hud-ctrl">
+          <button class="chip-btn" data-speed="1" aria-label="Normal hız">1x</button>
+          <button class="chip-btn" data-speed="2" aria-label="İki kat hız">2x</button>
+          <button class="chip-btn pause" id="btn-pause" aria-label="Duraklat">⏸️</button>
+        </div>
+      </div>
+      <div class="stage-card day-stage">
+        <div class="stage-slot" data-slot="day"></div>
+      </div>
+      <div class="chips" id="chips"></div>
+      <div class="day-info" id="day-info"></div>
+      <p class="fine day-hint">Baloncuklara dokun! Hızlı dokunuş = kombo 🔥 · P: mola</p>
+    </section>
+
+    <!-- ===== AKŞAM ===== -->
+    <section class="screen" id="screen-evening">
+      <div class="evening-top">
+        <div class="stage-card">
+          <div class="stage-slot" data-slot="evening"></div>
+        </div>
+        <div class="report-card" id="report"></div>
+      </div>
+      <div class="evening-actions">
+        <button class="btn big red" id="btn-next">Yeni Güne Geç 🌅</button>
+      </div>
+    </section>
+
+    <!-- ===== FİNAL ===== -->
+    <section class="screen" id="screen-finale">
+      <div class="stage-card finale-stage"><div class="stage-slot" data-slot="finale"></div></div>
+      <div class="finale-card" id="finale"></div>
+    </section>
+
+  </main>
+
+  <!-- Paylaşılan sahne: ekranlar arasında taşınır -->
+  <div class="stage" id="stage">
+    <canvas id="scene" aria-label="Dükkân sahnesi"></canvas>
+    <div id="bubble-layer"></div>
+    <div class="stage-pause" id="stage-pause">
+      <div class="pause-box">
+        <div class="pause-emoji">☕</div>
+        <b>Çay molası</b>
+        <small>Pamuk bekliyor…</small>
+        <button class="btn red" id="btn-resume">Devam ▶</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Overlay'ler -->
+  <div class="overlay hidden" id="ov-levelup" role="dialog" aria-modal="true">
+    <div class="ov-panel levelup">
+      <div class="lv-badge" id="lv-badge">2</div>
+      <h2>Seviye atladın!</h2>
+      <div class="lv-title" id="lv-title"></div>
+      <p class="lv-story" id="lv-story"></p>
+      <p class="lv-unlock" id="lv-unlock"></p>
+      <button class="btn big red" id="btn-lv-ok">Harika! 🎉</button>
+    </div>
+  </div>
+
+  <div class="overlay hidden" id="ov-intro" role="dialog" aria-modal="true">
+    <div class="ov-panel intro">
+      <div class="intro-cat">🐈</div>
+      <p class="intro-line" id="intro-line"></p>
+      <div class="intro-dots" id="intro-dots"></div>
+      <div class="ov-actions">
+        <button class="btn cream" id="btn-intro-skip">Atla</button>
+        <button class="btn red" id="btn-intro-next">Devam ›</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="overlay hidden" id="ov-settings" role="dialog" aria-modal="true">
+    <div class="ov-panel settings">
+      <h2>Ayarlar ⚙️</h2>
+      <button class="btn big cream wide" id="btn-mute">🔊 Ses: Açık</button>
+      <button class="btn big cream wide" id="btn-home">🏠 Ana Menü</button>
+      <button class="btn big danger wide" id="btn-reset">🗑️ Oyunu Sıfırla</button>
+      <p class="fine">Kayıt bu tarayıcıda tutulur.</p>
+      <button class="btn red" id="btn-settings-close">Kapat</button>
+    </div>
+  </div>
+
+  <div class="overlay hidden" id="ov-confirm" role="dialog" aria-modal="true">
+    <div class="ov-panel confirm">
+      <div class="intro-cat">🙀</div>
+      <p id="confirm-text">Emin misin?</p>
+      <div class="ov-actions">
+        <button class="btn cream" id="btn-confirm-no">Vazgeç</button>
+        <button class="btn danger" id="btn-confirm-yes">Evet</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="toasts" id="toasts" aria-live="polite"></div>
+</div>
+
+<script src="js/data.js"></script>
+<script src="js/engine.js"></script>
+<script src="js/sfx.js"></script>
+<script src="js/bubbles.js"></script>
+<script src="js/render.js"></script>
+<script src="js/ui.js"></script>
+<script src="js/main.js"></script>
+</body>
+</html>

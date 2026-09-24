@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Turn Based War</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <!-- ============ EKİBİNİ KUR EKRANI ============ -->
+  <div id="screen-create">
+    <div class="create-inner">
+      <h1>EKİBİNİ KUR <span class="sub">— 3 kahraman · her birine 7 puan</span></h1>
+      <div id="heroes"></div>
+      <div class="create-footer">
+        <div id="create-warn" class="muted"></div>
+        <button id="btnStart" class="startbtn" disabled>SAVAŞA BAŞLA ⚔️</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ OYUN EKRANI ============ -->
+  <div id="app" style="display:none">
+    <div id="arena">
+      <h1>TURN BASED WAR <span class="sub">— prototip: 1. arena</span></h1>
+      <canvas id="board"></canvas>
+      <div id="banner">Savaş başlıyor...</div>
+    </div>
+
+    <aside id="panel">
+      <div id="turnbox" class="card">
+        <div class="label">SIRA</div>
+        <div id="turnname">-</div>
+        <div id="turnround" class="muted">Round 1</div>
+      </div>
+
+      <div id="unitbox" class="card">
+        <div id="unitstats"></div>
+        <div id="actions">
+          <button id="btnMove">Hareket</button>
+          <button id="btnAttack">Saldır</button>
+          <button id="btnSpell">Büyü</button>
+          <button id="btnAbility">Yetenek</button>
+          <button id="btnEnd" class="end">Turu Bitir</button>
+        </div>
+        <div id="spellmenu"></div>
+        <div id="hint" class="muted"></div>
+      </div>
+
+      <div id="orderbox" class="card">
+        <div class="label">İNİSİYATİF SIRASI</div>
+        <ol id="orderlist"></ol>
+      </div>
+
+      <div id="logbox" class="card">
+        <div class="label">SAVAŞ GÜNLÜĞÜ</div>
+        <div id="log"></div>
+      </div>
+
+      <div class="btnrow">
+        <button id="btnNew" class="newbattle">↻ Yeni Savaş</button>
+        <button id="btnRebuild" class="newbattle">← Ekibi Değiştir</button>
+      </div>
+    </aside>
+  </div>
+
+  <script src="js/hex.js"></script>
+  <script src="js/sprites.js"></script>
+  <script src="js/data.js"></script>
+  <script src="js/engine.js"></script>
+  <script src="js/render.js"></script>
+  <script src="js/creation.js"></script>
+  <script src="js/main.js"></script>
+</body>
+</html>
