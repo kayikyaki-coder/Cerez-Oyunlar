@@ -22,7 +22,7 @@ Bir arayüzü değiştirmen gerekiyorsa bunu raporunda açıkça yaz; sessizce d
 - **Atlama** aynı simülasyonu baloncuklara hiç basılmadan (headless) koşturur. Böylece fark mekanik olarak doğal çıkar.
 - **KESİN KURAL**: Erken oyunda (gün 1–15) oynanan gün, atlanan güne göre **en az %20** daha fazla net kazanç vermeli. Orta/geç oyunda da en az ~%12 fark kalmalı (çırak yükseltmesi farkı biraz azaltabilir ama kapatamaz).
 - Günler birbirinden farklı hissettirmeli: haftanın günü + hava + olay + günün hedefi + mahalle sakinlerinin (regulars) istekleri.
-- Gelişim biraz zorlayıcı olmalı: yükseltmeler anlamlı para ister, stok kararı önemli, ama asla çıkmaza girilmez (iflas yok; en kötü ihtimalle "Pamuk'un kumbarası" küçük bir kurtarma verir).
+- Gelişim zorlayıcıdır ve **kaybedilebilir** (v2): kira, günlük gider, borç ve iflas vardır (aşağıdaki "Mekanik v2" bölümü). "Pamuk'un kumbarası" oyun boyu sınırlı hak veren küçük bir güvenlik ağıdır.
 - Final hedef: **"Mahallenin Yıldızı"** — son yükseltme "Büyük Açılış / Dükkânı Genişlet" alınınca final sahnesi + istatistik ekranı, sonra sonsuz mod.
 
 ## Dosyalar ve sahiplik
@@ -191,10 +191,10 @@ Kurallar:
 - Skip modunda ve baloncuk süresi dolduğunda `effects.autoSolve` ihtimaliyle otomatik çözülür (ödül yok, ceza yok).
 - `restock` baloncuğu dinamik: bir ürünün raf stoğu 0 olunca ve **depoda** stok varsa... (sade tut:) raf = stok; `restock` yerine
   ürün bitince "📦 {Ürün} bitti!" baloncuğu çıkar; basılırsa **acil tedarik**: en fazla 3 adet otomatik alınır (alış fiyatının 1.2 katı, para yetiyorsa), satış devam eder. Basılmazsa o ürün gün sonuna kadar yok.
-- Gün sonunda `fresh` ürünler buzdolabı yoksa yarıya iner (bozulma).
+- Gün sonunda ürünler **partiler halinde yaşlanır**: `shelfLife` gece dolan parti tamamen bozulur (buzdolabı taze ürün ömrünü ×2,5 uzatır). Stok, ürün başı kapasiteyle değil **toplam raf yuvasıyla** sınırlıdır (`Game.totalSlots()`).
 - İtibar XP: satış + memnuniyet + hedef. Seviye atlayınca yeni ürün/yükseltme/olay açılır.
 - Memnuniyet (sat) yarının müşteri sayısını etkiler (±%15 aralığında).
-- Para asla negatif olmaz. Para < en ucuz ürün ve hiç stok yoksa: "Pamuk'un kumbarası" +20₺ (günde bir kez).
+- Para asla negatif olmaz (ödenemeyen gider borca yazılır). Para < en ucuz ürün ve hiç stok yoksa: "Pamuk'un kumbarası" +₺25 (günde bir kez, oyun boyu sınırlı hak: zorluğa göre 5/3/1/0).
 
 ## js/bubbles.js — API (global `Bubbles`)
 ```js
@@ -241,3 +241,44 @@ Ekranlar: `#screen-title` (Devam / Yeni Oyun), `#screen-morning`, `#screen-day`,
 ## Kod stili
 - Türkçe yorumlar, kısa ve yerinde. Dosya başında 1–2 satır açıklama (mevcut `js/*.js` dosyalarındaki gibi).
 - Harici kütüphane yok (Google Fonts hariç). Tüm oyun `kose-market/index.html` açılarak (file:// dahil) çalışmalı.
+
+
+---
+
+# Mekanik v2 (güncel sözleşme — mekanik ajan)
+
+Motor API'si geriye dönük uyumludur; aşağıdakiler EKLENDİ. Kayıt sürümü **2** (`koseMarket.v2`; v1 otomatik taşınır, `Game.loadNote` kullanıcıya gösterilir).
+
+## Durum (`Game.state`) eklemeleri
+`diff` ("kolay"|"normal"|"zor"|"efsane"), `prices{id:0|1|2}`, `batch{id:[adet_yaş0, adet_yaş1…]}` (stok partileri; `stock` toplamdır), `debt`, `debtDays`, `bankrupt:null|{day,reason,debt}`,
+`equip{fridge,register}` (0–100), `broken{fridge,register}`, `piggyLeft`, `eveningPending`, `dayOpen`, `hints{}`, `season`, `graceUntil`.
+
+## Yeni/Değişen API
+```js
+Game.newGame(seed?, diffId?)         // zorluk seçilir
+Game.setPrice(id, 0|1|2) / priceOf(id) / priceAt(id,t) / priceInfo(id, plan?) / rivalPrice(id)
+Game.planDay()  // + customers (fiyat, rakip, çeşitlilik dahil), weights, heat, factors, rival:{active,open,share,campaign,lost}
+Game.totalSlots() / slotsUsed() / slotsFree() / slotsOf(id) / stockAging(id) / lifeOf(id)
+Game.expectedSales(plan?) / stockTargets(plan?, mult?) / fillAll(mult?) / fillProduct(id) / buyStock(id,n) / lineCost(id,n) / unitCost(id) // ondalıklı
+Game.finance()                       // {money, debt, debtLimit, debtDays, utility, rentDay, rentIn, rentAmount, rentToday, interest, piggyLeft, grace}
+Game.repayDebt(n) / Game.service("fridge"|"register") / Game.serviceCost(eq) / Game.equipInfo()
+Game.crisisView() / Game.resolveCrisis(optionId|"ignore") / Game.crisisAdvice()   // kriz kartı
+Game.tapBubble(id) // + {crisis:true} (kart açıldı) / {special:"thief"|"break"|"crisis"}
+Game.abandonDay()                    // gün ortasında bırak → kalan süre başıboş
+Game.ackEvening()                    // akşam raporu görüldü (rapor kalıcı: eveningPending)
+Game.simulateClone(mode, policy, noiseKey?)   // noiseKey≠0: tahmin ekranı için "benzer gün" (belirsizlik)
+Game.hasCheckpoint() / loadCheckpoint()       // iflasta "Son Kayıttan Devam" (her Pazartesi sabahı)
+Game.seasonInfo() / pendingHint() / dismissHint(id) / difficulties()
+```
+`Game.tick` yeni olaylar: `theft, thiefCaught, breakdown, repair, salvo, spoil, crisisOpen, crisisResolve`; `customerMiss.reason` ayrıca `"register"`.
+
+## data.js eklemeleri
+`BALANCE` (kira, borç, hırsız, ekipman, kriz, salvo, sezon, fiyat/talep anahtarları — motorda `B(k, d)` varsayılanı data ile aynıdır), `DIFFICULTIES`, `DIFF_ORDER`, `RIVAL`, `CRISES`, `HINTS`;
+`PRODUCTS[]`: `el` (fiyat esnekliği), `shelfLife`, `slots`, `traffic`, `cold`; `UPGRADES[].levels[].effect`: `slots, upkeep, lifeBonus, rivalGuard, thiefAuto, weatherShield, theftMult, wearMult, regWear, rentMult, comboWindow`; `UPGRADES[].req`;
+`BUBBLE_TYPES[].penalty`: `money, lostCustomers, lostSalesSec, steal, breakEquip, spoil, sat`; yeni türler `thief, breakFridge, breakReg, crisis`.
+
+## Kurallar
+- Her akşam: gider (elektrik+maaş+aidat, depolama), Pazar kira, borç faizi; ödenemeyen borca yazılır; pozitif kârın %40'ı borca gider; limit/14 gün → iflas (`Game.state.bankrupt`, `startDay` null döner).
+- Tüm mekanikler tohumludur (`hash(seed, gün, akış, noise)`); oyna ve atla aynı müşteri/baloncuk/kriz dizisini görür (Hızlı Geç'te hırsız sayısı ayrıca ×1,8, kriz kartları "ignore").
+- Gün başlayınca kayıt `dayOpen:true` yazılır; gün ortasında yenileme o günü `skipDay` ile (başıboş) bitirir.
+- `mech.css` style.css'ten önce yüklenir; yeni DOM kimlikleri `HANDOFF_RENDER.md`'de.

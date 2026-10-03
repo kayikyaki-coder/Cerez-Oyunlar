@@ -1,15 +1,17 @@
-// Köşe Market — ana akış ve döngü: ekran geçişleri, Game.tick → Render/Bubbles yönlendirme, kısayollar, otomatik kayıt.
+// Köşe Market — ana akış ve döngü: ekran geçişleri, Game.tick → Render/Bubbles yönlendirme, kısayollar, otomatik kayıt, iflas akışı.
 (function () {
   "use strict";
 
   const $ = (id) => document.getElementById(id);
   const sfx = (name, a) => { try { if (typeof Sfx !== "undefined" && Sfx[name]) Sfx[name](a); } catch (e) { /* sessiz */ } };
+  // Render henüz güncellenmemiş olabilir: her çağrı "varsa çağır"
+  const R = (name, ...a) => { try { if (typeof Render !== "undefined" && typeof Render[name] === "function") return Render[name](...a); } catch (e) { /* görsel hata oyunu bozmasın */ } };
   const SPEED_KEY = "koseMarket.speed";
 
   let phase = "title";        // title | morning | day | evening | finale
   let speed = 1, paused = false, settingsOpen = false;
   let endTimer = -1;          // dayEnd sonrası müşteriler çıkarken kısa bekleme (sn)
-  let hasSave = false;
+  let hasSave = false, noteShown = false;
   let last = 0;
 
   try { speed = +localStorage.getItem(SPEED_KEY) === 2 ? 2 : 1; } catch (e) { /* yok say */ }
@@ -17,26 +19,28 @@
   // ---------- ekranlar ----------
   function goTitle() {
     phase = "title"; setPaused(false);
-    UI.mountStage("title");
-    Render.idle(Game.state, "morning", Game.planDay());
+    UI.mountStage("title"); UI.hideCrisis();
+    R("idle", Game.state, "morning", Game.planDay());
     UI.renderTitle(hasSave);
     UI.show("title");
   }
   function goMorning(anim) {
-    phase = "morning"; UI.stopTitle();
+    phase = "morning"; UI.stopTitle(); UI.hideCrisis();
     const plan = Game.planDay();
     UI.mountStage("morning");
-    Render.idle(Game.state, "morning", plan);
+    R("idle", Game.state, "morning", plan);
     UI.renderMorning(plan, anim !== false);
     UI.show("morning");
+    UI.setAtmos(plan); $("app").dataset.phase = "morning";
   }
   // Raflar çok boşsa ve para yetiyorsa önce sor: "Dengeli doldurayım mı?" (yanlışlıkla boş rafla gün geçmesin)
   let asking = false;
   async function stockCheck(verb) {
     const s = Game.state, plan = Game.planDay();
     const total = Object.keys(s.stock).reduce((a, id) => a + (s.unlocked[id] ? s.stock[id] || 0 : 0), 0);
-    const canFill = Object.keys(s.unlocked).some((id) => s.unlocked[id] && (s.stock[id] || 0) < Game.shelfCap() && s.money >= Game.unitCost(id));
-    if (total >= plan.customers * 0.5 || !canFill) return true;
+    const exp = Object.values(Game.expectedSales(plan)).reduce((a, b) => a + b, 0);
+    const canFill = Object.keys(s.unlocked).some((id) => s.unlocked[id] && Game.slotsFree() >= Game.slotsOf(id) && s.money >= Game.unitCost(id));
+    if (total >= exp * 0.45 || !canFill) return true;
     asking = true;
     const yes = await UI.confirm("Raflar çok boş 🧺 Müşteriler eli boş dönebilir. " + verb + " önce Dengeli Doldur yapalım mı?", "🧮 Doldur ve devam", "Böyle kalsın");
     asking = false;
@@ -49,15 +53,16 @@
     if (phase !== "morning") return;
     const s = Game.state, any = Object.keys(s.stock).some((id) => s.unlocked[id] && s.stock[id] > 0);
     if (!any) UI.toast("Raflar boş ama olsun, baloncuklardan da kazanırsın 🫧", "bad");
-    Game.startDay({ mode: "play" });
+    if (!Game.startDay({ mode: "play" })) return;
     const plan = Game.run.plan;
     Bubbles.clear(); Bubbles.setPaused(false);
     UI.mountStage("day");
-    Render.setDay(plan, Game.state);
+    R("setDay", plan, Game.state);
     UI.renderDayStart(plan);
     UI.setSpeedButtons(speed);
     phase = "day"; paused = false; endTimer = -1; setPaused(false);
     UI.show("day");
+    UI.setAtmos(plan); $("app").dataset.phase = "day";
     sfx("dayStart");
   }
   async function skipDay() {
@@ -71,51 +76,76 @@
   }
   function finishPlayDay() {
     const summary = Game.endDay();
-    Bubbles.clear();
+    Bubbles.clear(); UI.hideCrisis();
     goEvening(summary);
   }
-  function goEvening(summary) {
-    phase = "evening"; setPaused(false);
-    try { Game.save(); } catch (e) { /* motor zaten kaydediyor */ }
+  // restored: kayıttan dönüş (rapor yeniden gösterilir; ses/seviye atlama tekrarlanmaz)
+  function goEvening(summary, restored) {
+    phase = "evening"; setPaused(false); UI.hideCrisis();
+    if (!restored) { try { Game.save(); } catch (e) { /* motor zaten kaydediyor */ } }
     hasSave = true;
     UI.mountStage("evening");
-    Render.idle(Game.state, "evening");
-    UI.renderEvening(summary || Game.state.lastSummary || {});
+    R("idle", Game.state, "evening");
+    UI.renderEvening(summary || Game.state.lastSummary || {}, restored);
     UI.show("evening");
-    sfx("dayEnd");
-    if (summary && summary.levelUp) {
-      setTimeout(() => { Render.confetti && Render.confetti(90); UI.showLevelUp(summary.levelUp).then(() => UI.renderEvening(summary)); }, 650);
-    }
+    $("app").dataset.phase = "evening";
+    if (!restored) sfx("dayEnd");
+    if (summary && summary.levelUp && !restored) {
+      setTimeout(() => { R("confetti", 90); UI.showLevelUp(summary.levelUp).then(() => { UI.renderEvening(summary); if (Game.state.bankrupt) goBankrupt(); }); }, 650);
+    } else if (Game.state.bankrupt) setTimeout(goBankrupt, restored ? 150 : 1100);
+  }
+  async function goBankrupt() {
+    if (!Game.state.bankrupt || UI.anyOverlay()) return;
+    sfx("miss");
+    const choice = await UI.showBankrupt();
+    if (choice === "new") await startNewGame(Game.state.diff);
+    else if (choice === "check") {
+      if (Game.loadCheckpoint()) { UI.toast("Son kayıt noktasına dönüldü ⏪", "good"); hasSave = true; goMorning(); }
+      else { UI.toast("Kayıt noktası bulunamadı", "bad"); goTitle(); }
+    } else { hasSave = true; goTitle(); }
   }
   function nextDay() {
     if (phase !== "evening") return;
     sfx("click");
     const s = Game.state;
+    if (s.bankrupt) return goBankrupt();
+    Game.ackEvening();
     if (s.won && !s.uiFinaleSeen) return goFinale();
     goMorning();
   }
   function goFinale() {
     phase = "finale";
     UI.mountStage("finale");
-    Render.idle(Game.state, "evening");
-    Render.refresh && Render.refresh();
+    R("idle", Game.state, "evening");
+    R("refresh");
     UI.renderFinale(); UI.show("finale");
-    Render.confetti && Render.confetti(120);
+    R("confetti", 120);
     sfx("levelUp");
   }
 
   // ---------- sabah işlemleri ----------
   function afterPurchase(msg, kind) {
     try { Game.save(); } catch (e) { /* yok say */ }
-    Render.refresh && Render.refresh();
+    R("refresh");
     UI.refreshMorning();
     if (msg) UI.toast(msg, kind);
   }
+  async function startNewGame(diffId) {
+    if (Game.clearSave) Game.clearSave();
+    Game.newGame(undefined, diffId); Game.save(); hasSave = true;
+    UI.stopTitle();
+    await UI.intro();
+    goMorning();
+  }
   const handlers = {
     buy(id, n) {
-      const got = Game.buyStock(id, n);
+      let got = 0;
+      if (n === "fill") got = Game.fillProduct(id); else got = Game.buyStock(id, +n);
       if (got > 0) { sfx("coin"); UI.flashCard(id); afterPurchase(); }
       else { sfx("miss"); UI.toast("Olmadı: raf dolu ya da para yetmiyor 🙀", "bad"); }
+    },
+    setPrice(id, tier) {
+      if (Game.setPrice(id, tier)) { sfx("click"); afterPurchase(); UI.flashCard(id); }
     },
     unlock(id) {
       if (Game.unlockProduct(id)) {
@@ -136,18 +166,41 @@
       if (n > 0) { sfx("coin"); afterPurchase("Raflar dengelendi: +" + n + " ürün 🧺", "good"); }
       else UI.toast("Doldurulacak yer ya da para kalmadı 🐾");
     },
+    service(eq) {
+      if (Game.service(eq)) { sfx("coin"); afterPurchase("🔧 Bakım yapıldı, ekipman sapasağlam!", "good"); }
+      else { sfx("miss"); UI.toast("Olmadı: para yetmiyor 🙀", "bad"); }
+    },
+    repay() {
+      const n = Game.repayDebt(Game.state.money);
+      if (n > 0) { sfx("coin"); afterPurchase("💳 " + UI.fmt(n) + " borç ödendi", "good"); } else UI.toast("Ödeyecek para yok 🐾");
+    },
+    hint(id) { Game.dismissHint(id); sfx("click"); UI.refreshMorning(); },
+    crisis(optId) {
+      if (phase !== "day") return;
+      const r = Game.resolveCrisis(optId);
+      if (r && r.ok === false) { sfx("miss"); UI.toast("Bu seçenek için para yetmiyor 🙀", "bad"); return; }
+      UI.hideCrisis();
+      if (r) { sfx(r.choice === "ignore" ? "miss" : "coin"); UI.toast("❓ " + r.text, r.choice === "ignore" ? "bad" : "good"); }
+      UI.updateHud();
+    },
     open: openShop,
     skip: skipDay,
     next: nextDay,
-    cont() { sfx("click"); if (Game.state.won && !Game.state.uiFinaleSeen) return goFinale(); goMorning(); },
+    cont() {
+      sfx("click");
+      const s = Game.state;
+      if (Game.loadNote && !noteShown) { noteShown = true; UI.notice(Game.loadNote, "Anladım"); }
+      if (s.bankrupt) { goEvening(s.lastSummary, true); return; }
+      if (s.eveningPending && s.lastSummary) { goEvening(s.lastSummary, true); return; }
+      if (s.won && !s.uiFinaleSeen) return goFinale();
+      goMorning();
+    },
     async newGame() {
       sfx("click");
       if (hasSave && !(await UI.confirm("Yeni oyun başlasın mı? Eski dükkânın kaydı silinir."))) return;
-      if (Game.clearSave) Game.clearSave();
-      Game.newGame(); Game.save(); hasSave = true;
-      UI.stopTitle();
-      await UI.intro();
-      goMorning();
+      const diff = await UI.pickDifficulty();
+      if (!diff) return;
+      await startNewGame(diff);
     },
     pause(v) { if (phase !== "day") return; setPaused(v === undefined ? !paused : !!v); sfx("click"); },
     speed(v) {
@@ -155,10 +208,13 @@
       try { localStorage.setItem(SPEED_KEY, String(speed)); } catch (e) { /* yok say */ }
     },
     settingsOpen(open) { settingsOpen = open; if (phase === "day" && open) setPaused(true); },
-    home() {
-      if (phase === "day") { // yarım gün: güvenli şekilde bitir
+    async home() {
+      if (phase === "day") {   // yarım gün: kalan süre başıboş geçer (kaçış yok: yenilemek de aynı sonucu verir)
+        const yes = await UI.confirm("Günü yarıda bırakırsan kalan süre başıboş geçer: baloncuklar kaçar, hırsız gelir, açık kriz 'görmezden gel' olur. Bırakılsın mı?", "Bırak", "Devam et");
+        if (!yes) { handlers.settingsOpen(false); return; }
         UI.toast("Gün kapatıldı, rapor hazırlanıyor…");
-        finishPlayDay(); return;
+        const summary = Game.abandonDay(); Bubbles.clear(); UI.hideCrisis();
+        goEvening(summary); return;
       }
       goTitle();
     },
@@ -185,7 +241,7 @@
     switch (ev.type) {
       case "bubbleSpawn": {
         const b = ev.bubble;
-        const pos = Render.zonePos(b.zone, b.zoneIndex || 0, b.productId);
+        const pos = (typeof Render !== "undefined" && Render.zonePos) ? Render.zonePos(b.zone, b.zoneIndex || 0, b.productId) : { x: 480, y: 270 };
         Bubbles.spawn(b, pos);
         break;
       }
@@ -202,19 +258,30 @@
         if (ev.failed) UI.toast("Hedef kaçtı… olsun, keyfimiz yerinde 🐾", "bad");
         break;
       case "restock":
+        if (ev.bulk) UI.toast("🚚 " + ev.qty + " ürün rafa girdi (−" + UI.fmt(ev.cost) + ")", "good");
         break;
+      case "theft": UI.toast("🥷 Hırsız " + (ev.emoji || "") + " ×" + ev.qty + " götürdü! (~" + UI.fmt(ev.value || 0) + ")", "bad"); sfx("miss"); break;
+      case "thiefCaught": if (!ev.auto) { UI.toast("🕵️ Hırsızı yakaladın!", "good"); } else UI.toast("📹 Kamera hırsızı yakaladı!", "good"); break;
+      case "breakdown": UI.toast("💥 " + (ev.equip === "fridge" ? "Buzdolabı" : "Yazar kasa") + " bozuldu! Sabah tamir gerekir.", "bad"); sfx("miss"); break;
+      case "repair": UI.toast("🔧 Hızlı müdahale: arıza önlendi", "good"); break;
+      case "salvo": UI.toast("⚡ Yoğun saat! " + ev.count + " sorun birden", "bad"); break;
+      case "crisisOpen": UI.renderCrisis(); break;
+      case "crisisResolve": if (ev.auto) { UI.hideCrisis(); UI.toast("❓ " + ev.text, "bad"); } break;
       case "dayEnd":
         endTimer = 1.6;
         break;
     }
-    Render.handle(ev);
+    R("handle", ev);
   }
 
   Bubbles.onTap = (id) => {
     if (phase !== "day" || paused) return;
+    const pos = Bubbles.pos ? Bubbles.pos(id) : null, b = Game.run && Game.run.bubbles[id];
     const r = Game.tapBubble(id);
     if (!r) return;
     Bubbles.feedback(id, r);   // pop/coin sesleri ve kombo flaşı bubbles.js'de
+    if (r.popped && pos) R("handle", { type: "bubblePop", x: pos.x, y: pos.y, reward: r.reward, combo: r.combo, golden: !!(b && (b.type === "golden")), special: r.special });
+    if (r.crisis) UI.renderCrisis();
     UI.updateHud();
   };
 
@@ -227,15 +294,15 @@
         const gdt = dt * speed;
         const evs = Game.tick(gdt) || [];
         for (const ev of evs) route(ev);
-        Render.update(gdt);
+        R("update", gdt);
         Bubbles.update(gdt);
         UI.updateHud();
         if (endTimer >= 0) { endTimer -= dt; if (endTimer < 0) finishPlayDay(); }
       }
     } else {
-      Render.update(dt);
+      R("update", dt);
     }
-    Render.draw();
+    R("draw");
     requestAnimationFrame(frame);
   }
 
@@ -243,6 +310,12 @@
   document.addEventListener("keydown", (e) => {
     if (e.repeat) return;
     const k = e.key;
+    if (phase === "day" && !paused && /^[0-9]$/.test(k) && Game.crisisView && Game.crisisView()) {   // kriz kartı: 1-3 seçenek, 0 görmezden gel
+      const v = Game.crisisView(), idx = +k;
+      const id = idx === 0 ? "ignore" : v.options[idx - 1] && v.options[idx - 1].id;
+      if (id) { e.preventDefault(); handlers.crisis(id); }
+      return;
+    }
     if (k === " " || k === "Spacebar" || k === "Enter") {
       const tag = (e.target && e.target.tagName) || "";
       if (k === "Enter" && tag === "BUTTON") return;   // odaklı buton kendi işini yapsın
@@ -270,13 +343,13 @@
     const w = window.innerWidth, h = window.innerHeight;
     const portrait = w <= 600 && h >= w * 1.25;
     const v = portrait ? [56, 936] : [0, 960];
-    if (Render.setView) Render.setView(v[0], v[1]);
+    R("setView", v[0], v[1]);
     if (Bubbles.setView) Bubbles.setView(v[0], v[1]);
   }
 
   // ---------- başlat ----------
   function boot() {
-    Render.init($("scene"));
+    R("init", $("scene"));
     Bubbles.init($("bubble-layer"));
     applyView();
     window.addEventListener("resize", applyView);
@@ -286,11 +359,11 @@
     goTitle();
     requestAnimationFrame(frame);
     // Fontlar gelince sahne metinleri doğru fontla çizilsin
-    if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => Render.draw());
+    if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => R("draw"));
   }
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", boot);
   else boot();
 
   // Test/hata ayıklama için
-  window.KM = { get phase() { return phase; }, handlers, openShop, skipDay, nextDay, goMorning, get speed() { return speed; } };
+  window.KM = { get phase() { return phase; }, handlers, openShop, skipDay, nextDay, goMorning, goEvening, get speed() { return speed; } };
 })();
