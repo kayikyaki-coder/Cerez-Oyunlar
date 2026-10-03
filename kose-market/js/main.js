@@ -11,7 +11,7 @@
   let phase = "title";        // title | morning | day | evening | finale
   let speed = 1, paused = false, settingsOpen = false;
   let endTimer = -1;          // dayEnd sonrası müşteriler çıkarken kısa bekleme (sn)
-  let hasSave = false;
+  let hasSave = false, noteShown = false;
   let last = 0;
 
   try { speed = +localStorage.getItem(SPEED_KEY) === 2 ? 2 : 1; } catch (e) { /* yok say */ }
@@ -189,7 +189,7 @@
     cont() {
       sfx("click");
       const s = Game.state;
-      if (Game.loadNote) { const n = Game.loadNote; UI.notice(n, "Anladım"); }
+      if (Game.loadNote && !noteShown) { noteShown = true; UI.notice(Game.loadNote, "Anladım"); }
       if (s.bankrupt) { goEvening(s.lastSummary, true); return; }
       if (s.eveningPending && s.lastSummary) { goEvening(s.lastSummary, true); return; }
       if (s.won && !s.uiFinaleSeen) return goFinale();

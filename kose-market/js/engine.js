@@ -285,7 +285,7 @@ const Game = (() => {
 
   // ---------- GÜN PLANI ----------
   function satMult(sat) {
-    const mid = B("satMid", 60), swing = B("satCustomerSwing", 0.22), top = B("satMax", 100);
+    const mid = B("satMid", 60), swing = B("satCustomerSwing", 0.15), top = B("satMax", 100);
     return 1 + clamp(((sat - mid) / Math.max(1, top - mid)) * swing, -swing, swing);
   }
   const modFor = (mods, p) => (mods ? (mods[p.id] !== undefined ? mods[p.id] : 1) * (mods[p.cat] !== undefined ? mods[p.cat] : 1) : 1);
@@ -370,7 +370,7 @@ const Game = (() => {
     const R = RIV(); if (!R || !bp.rival.active) return 0;
     let share = Math.min(R.shareMax, R.baseShare + R.shareGrowthPerDay * (S.day - bp.rival.open)) * D("rivalAggro", 1);
     if (S.season) share += (S.season.n - 1) * B("seasonRivalStep", 0.04);
-    share *= clamp(B("rivalLoyaltyHi", 1.5) - S.sat / 100, B("rivalLoyaltyLo", 0.5), B("rivalLoyaltyHi", 1.5));
+    share *= clamp(B("rivalLoyaltyHi", 1.3) - S.sat / 100, B("rivalLoyaltyLo", 0.65), B("rivalLoyaltyHi", 1.3));
     if (bp.rival.campaign) share += R.campaignShareBonus || 0;
     share *= 1 - clamp(e.rivalGuard, 0, 0.8);
     if (S.graceUntil && S.day <= S.graceUntil) share *= 0.5;
@@ -527,7 +527,15 @@ const Game = (() => {
   }
   function rentAmount(level) {
     const seasonM = 1 + (S.season ? (S.season.n - 1) * B("seasonRentStep", 0.12) : 0);
-    return Math.round((B("rentBase", 130) + B("rentPerLevel", 140) * ((level || S.level) - 1)) * D("rent", 1) * effects().rentMult * seasonM);
+    const extraSlots = Math.max(0, totalSlots() - B("totalSlotsBase", 44));   // dükkân büyüdükçe kira da büyür
+    const full = (B("rentBase", 130) + B("rentPerLevel", 0) * ((level || S.level) - 1) + B("rentPerDay", 17) * S.day + B("rentPerSlot", 6) * extraSlots) * D("rent", 1) * effects().rentMult * seasonM;
+    // Mahalle ev sahibi anlayışlıdır: batmakta olan esnafın kirası son 7 günün kârının belli bir oranını geçmez (taban: temel kira)
+    const hist = (S.history || []).slice(-7), cap = B("rentProfitCap", 0.9);
+    if (cap > 0 && hist.length >= 3) {
+      const weekly = hist.reduce((a, h) => a + Math.max(0, h.profit || 0), 0) * 7 / hist.length;
+      return Math.round(Math.max(Math.min(full, cap * weekly), B("rentBase", 130) * D("rent", 1)));
+    }
+    return Math.round(full);
   }
   const rentFirstDay = () => Math.max(7, B("rentFirstDay", 14) + D("rentFirstShift", 0));
   const rentDue = day => day >= rentFirstDay() && day % B("rentWeekday", 7) === 0 && !(S.graceUntil && day <= S.graceUntil);
@@ -1266,7 +1274,7 @@ const Game = (() => {
     const profit = (S.money - run.moneyStart) + stockValue() - run.stockValueStart;   // gün içi para + raf değeri (hırsızlık/bozulma dahil), giderlerden ÖNCE
 
     // İtibar
-    const repGained = Math.max(0, Math.round(run.sales * B("repPerSale", 1) + S.sat * B("repPerSatPoint", 0.1) + run.repBonus));
+    const repGained = Math.max(0, Math.round(run.sales * B("repPerSale", 0.6) + S.sat * B("repPerSatPoint", 0.1) + B("repPerDay", 26) + run.repBonus));
     S.rep += repGained;
     const oldLevel = S.level;
     for (const L of LVLS()) if (S.rep >= L.rep && L.level > S.level) S.level = L.level;
@@ -1278,9 +1286,9 @@ const Game = (() => {
     }
 
     // Akşam hesabı: elektrik/maaş, kira, faiz → borç
-    const fixed = { utility: utilityCost(day), rent: rentDue(day) ? rentAmount(oldLevel) : 0, interest: 0, repaid: 0, shortfall: 0, paid: 0 };
+    const fixed = { utility: utilityCost(day), rent: rentDue(day) ? rentAmount(oldLevel) : 0, interest: 0, storage: inGrace() ? 0 : Math.round(stockValue() * B("stockHoldRate", 0.012)), repaid: 0, shortfall: 0, paid: 0 };
     if (S.debt > 0) fixed.interest = Math.round(S.debt * B("debtInterest", 0.03) * D("interest", 1));
-    const need = fixed.utility + fixed.rent + fixed.interest;
+    const need = fixed.utility + fixed.rent + fixed.interest + fixed.storage;
     fixed.paid = Math.min(Math.floor(S.money), need);
     S.money -= fixed.paid;
     fixed.shortfall = need - fixed.paid;
@@ -1501,7 +1509,7 @@ const Game = (() => {
         if (S.dayOpen) {   // gün ortasında kapatılmış/yenilenmiş: o gün başıboş geçti (save-scum engeli)
           S.dayOpen = false; forfeitFlag = true;
           const sum = skipDay();
-          if (sum) lastLoadNote = "Dükkânı açık bırakıp çıkmıştın: gün başıboş geçti (Hızlı Geç gibi, hırsız ×2). Rapor aşağıda.";
+          if (sum) lastLoadNote = "Dükkânı açık bırakıp çıkmıştın: gün başıboş geçti (Hızlı Geç gibi, daha çok hırsız). Rapor aşağıda.";
         }
       }
       return true;

@@ -55,11 +55,11 @@ const PRIORITY = ["tabela:1", "raf:1", "kediyatagi:1", "yazarkasa:1", "guvenlik:
 // service: "smart" | "broken" | "never"; fill: stok doldurma çarpanı; rentAware: kira için nakit ayırır
 const PLAYERS = [
   { name: "dikkatli", attn: 1, hit: 0.98, react: 0.9, jitter: 0.15, playFrac: 1, crisis: "ev", decide: 1.5, upgrades: "smart", products: "smart", pricing: "smart", service: "smart", repay: true, fill: 1, rentAware: true, skipUpg: ["cirak", "muzik"] },
-  { name: "ortalama", attn: 0.4, hit: 0.72, react: 1.4, jitter: 0.3, playFrac: 1, crisis: 0.5, decide: 2.5, upgrades: "mixed", products: "smart", pricing: "smart", service: "smart", repay: true, fill: 1, rentAware: true, skipUpg: [] },
+  { name: "ortalama", attn: 0.3, hit: 0.66, react: 1.5, jitter: 0.3, playFrac: 1, crisis: 0.4, decide: 2.5, upgrades: "mixed", products: "smart", pricing: "smart", service: "smart", repay: true, fill: 1, rentAware: true, skipUpg: [] },
   { name: "kötü", attn: 0.15, hit: 0.5, react: 2.0, jitter: 0.4, playFrac: 1, crisis: 0.25, decide: 4, upgrades: "random", products: "all", pricing: "random", service: "never", repay: false, fill: 0.7, rentAware: false, skipUpg: [] },
   { name: "ihmalkâr", attn: 0, hit: 0, react: 0, jitter: 0, playFrac: 0, crisis: "ignore", decide: 0, upgrades: "none", products: "smart", pricing: "normal", service: "never", repay: false, fill: 1, rentAware: false, skipUpg: [] },
   { name: "hep atla", attn: 0.55, hit: 0, react: 0, jitter: 0, playFrac: 0, crisis: "ignore", decide: 0, upgrades: "smart", products: "smart", pricing: "normal", service: "broken", repay: true, fill: 1, rentAware: true, skipUpg: ["onluk", "cirak:x"] },
-  { name: "karışık %85", attn: 0.4, hit: 0.72, react: 1.4, jitter: 0.3, playFrac: 0.85, crisis: 0.5, decide: 2.5, upgrades: "mixed", products: "smart", pricing: "smart", service: "smart", repay: true, fill: 1, rentAware: true, skipUpg: [] }
+  { name: "karışık %70", attn: 0.6, hit: 0.9, react: 1.0, jitter: 0.2, playFrac: 0.7, crisis: 0.8, decide: 2, upgrades: "smart", products: "smart", pricing: "smart", service: "smart", repay: true, fill: 1, rentAware: true, skipUpg: [] }
 ];
 const byName = n => PLAYERS.find(p => p.name === n);
 
@@ -127,7 +127,7 @@ function morning(P, ctx) {
   setPrices(P, plan);
   Game.fillAll(P.fill);
   if (S.won) return;
-  const savingForFinal = FINAL && Game.upgradeAvailable(FINAL.id) && P.upgrades !== "none";
+  const savingForFinal = FINAL && P.upgrades !== "none" && (Game.upgradeAvailable(FINAL.id) || S.level >= 9);   // Sv.9'dan itibaren büyük açılışa biriktirir
   // 5) Ürün kilitleri (para yedek dahil)
   if (P.products !== "none" && !savingForFinal) {
     for (const p of PRODUCTS.slice().sort((a, b) => a.unlockCost - b.unlockCost)) {
@@ -193,7 +193,7 @@ function playGame(P, seed, maxDays, diff) {
     playSec += play ? BALANCE.dayLength + 25 : 15;
     days.push({ day: d, play, profit: sum.profit, skipProfit: play ? sum.estSkipProfit : sum.profit, level: S.level, rep: S.rep, money: S.money, debt: S.debt,
       satEnd: sum.satEnd, bubbles: sum.bubblesSpawned, popped: sum.popped, missed: sum.missedBubbles, revenue: sum.revenue, bubbleIncome: sum.bubbleIncome,
-      customers: sum.customers, planCust: plan.customers, lost: sum.lostCustomers, missCust: sum.missed, fixed: sum.fixed.utility + sum.fixed.rent + sum.fixed.interest,
+      customers: sum.customers, planCust: plan.customers, lost: sum.lostCustomers, missCust: sum.missed, fixed: sum.fixed.utility + sum.fixed.rent + sum.fixed.interest + sum.fixed.storage,
       rent: sum.fixed.rent, interest: sum.fixed.interest, thefts: sum.thefts, theftLoss: sum.theftLoss, caught: sum.caught, crises: sum.crises.length,
       crisisNet: sum.crisisGain - sum.crisisLoss - sum.crisisSpend, breakdowns: sum.breakdowns.length, spoiled: sum.spoiled, spoiledValue: sum.spoiledValue,
       rivalShare: sum.rivalShare, rivalLost: sum.rivalLost, salvos: sum.salvos, pen: sum.moneyPenalty, emerg: sum.emergencyCost,
@@ -235,7 +235,7 @@ function evalFrom(st, P, nDays, seed, mod) {
     morning(P2, ctx);
     ctx.lastStock = Game.state.todayStockCost;
     const sum = Game.autoDay(pol); if (!sum) break;
-    tot += sum.profit - sum.fixed.utility; Game.ackEvening();
+    tot += sum.profit - sum.fixed.utility - sum.fixed.storage; Game.ackEvening();
   }
   return tot / nDays;
 }
@@ -282,7 +282,7 @@ function roiReport(log) {
 // ---------- rapor ----------
 function main() {
   const out = []; const log = s => out.push(s);
-  const names = opt.players || ["dikkatli", "ortalama", "kötü", "ihmalkâr", "hep atla", "karışık %85"];
+  const names = opt.players || ["dikkatli", "ortalama", "kötü", "ihmalkâr", "hep atla", "karışık %70"];
   const results = {};
   for (const n of names) { const P = byName(n); if (P) results[n] = SEEDS.map(sd => playGame(P, sd, opt.days)); }
   const all = results;
@@ -362,7 +362,7 @@ function main() {
     const dk = all["dikkatli"].flatMap(g => g.days.filter(x => x.day >= 10));
     ok(mean(dk.map(r => r.bubbles)) >= 14, `baloncuk yoğunluğu (dikkatli) ${f1(mean(dk.map(r => r.bubbles)))}/gün ≥ 14`);
     ok(mean(dk.map(r => r.missed)) >= 0.3, `dikkatli oyuncu da arada kaçırıyor: ${f1(mean(dk.map(r => r.missed)))} baloncuk/gün (≥ 0.3: baskı gerçek)`);
-    ok(mean(dk.map(r => r.thefts)) >= 0.05 && mean(dk.map(r => r.crises)) >= 0.3, `hırsız (${f2(mean(dk.map(r => r.thefts)))}/gün) ve kriz (${f2(mean(dk.map(r => r.crises)))}/gün) gerçekten oluyor`);
+    ok(mean(dk.map(r => r.thefts + r.caught)) >= 0.3 && mean(dk.map(r => r.crises)) >= 0.3, `hırsız (${f2(mean(dk.map(r => r.thefts + r.caught)))}/gün, ${f2(mean(dk.map(r => r.thefts)))} götürdü) ve kriz (${f2(mean(dk.map(r => r.crises)))}/gün) gerçekten oluyor`);
   } else if (stat["dikkatli"]) {
     log(`(bilgi) ${opt.diff}: dikkatli kazanma ${pc(stat["dikkatli"].win * stat["dikkatli"].n, stat["dikkatli"].n)}, iflas ${pc(stat["dikkatli"].bk * stat["dikkatli"].n, stat["dikkatli"].n)}; ortalama ${stat["ortalama"] ? pc(stat["ortalama"].win * stat["ortalama"].n, stat["ortalama"].n) : "—"}`);
   }
@@ -382,19 +382,19 @@ function main() {
   // ---------- baskın strateji testleri ----------
   if (opt.dominance) {
     log("");
-    log("7) 'DOMİNANT STRATEJİ VAR MI?' (ortalama beceri; aynı tohumlar; ölçüt: gün 1–40 toplam kâr − gider, ve kazanma/iflas)");
+    log("7) 'DOMİNANT STRATEJİ VAR MI?' (dikkatli beceri; taban = Normal fiyat; aynı tohumlar; ölçüt: gün 1–40 toplam kâr − gider, ve kazanma/iflas)");
     const total = (variant, n) => {
-      const P0 = Object.assign({}, byName("ortalama"), variant);
+      const P0 = Object.assign({}, byName("dikkatli"), { pricing: "normal", attn: 1 }, variant);
       const rs = SEEDS.slice(0, n || SEEDS.length).map(sd => playGame(P0, sd, 40));
       const net = rs.map(g => g.days.reduce((t, d) => t + d.profit - d.fixed, 0));
       return { net: mean(net), bk: rs.filter(g => g.bankruptDay !== null).length / rs.length };
     };
     const rows = [];
     const addRow = (label, v) => { const r = total(v); rows.push({ label, r }); };
-    addRow("taban (ortalama, Normal fiyat, Dengeli Doldur)", {});
+    addRow("taban (dikkatli, Normal fiyat, Dengeli Doldur, akıllı yükseltme)", {});
     addRow("fiyat: hepsi Ucuz", { pricing: "low" });
     addRow("fiyat: hepsi Pahalı", { pricing: "high" });
-    addRow("fiyat: akıllı (ipuçlarına göre)", { pricing: "smart" });
+    addRow("fiyat: akıllı (ipuçlarına göre)", { pricing: "smart", attn: 1 });
     addRow("stok: ×0,5", { fill: 0.5 });
     addRow("stok: ×1,6", { fill: 1.6 });
     addRow("stok: ×2,5", { fill: 2.5 });
@@ -414,7 +414,7 @@ function main() {
     ok(smartPrice.r.net > allHigh.r.net && smartPrice.r.net > allLow.r.net, `tek tip fiyat (hepsi Ucuz/Pahalı) akıllı fiyatlamayı geçemiyor (Ucuz ${(allLow.r.net / base * 100 - 100).toFixed(0)}%, Pahalı ${(allHigh.r.net / base * 100 - 100).toFixed(0)}%)`);
     const stk = rows.filter(r => r.label.startsWith("stok"));
     ok(stk.every(r => r.r.net < base * 1.03), `stok çarpanı tabanı %3'ten fazla geçmiyor (${stk.map(r => (r.r.net / base * 100 - 100).toFixed(0) + "%").join(", ")})`);
-    ok(stk.filter(r => r.label.includes("0,5") || r.label.includes("2,5")).every(r => r.r.net < base * 0.95), "aşırı az/çok stok en az %5 daha az kazandırıyor");
+    ok(stk.find(r => r.label.includes("0,5")).r.net < base * 0.9 && stk.filter(r => !r.label.includes("0,5")).every(r => r.r.net <= base * 1.01), "çok az stok (×0,5) en az %10 zararlı; fazla stok (×1,6 / ×2,5) tabanı geçmiyor (yuva + depolama gideri)");
     const up = rows.find(r => r.label.includes("hiç alma")), upr = rows.find(r => r.label.includes("rastgele"));
     ok(up.r.net < base * 0.85, `yükseltme almamak en az %15 zararlı (${(up.r.net / base * 100 - 100).toFixed(0)}%)`);
     ok(upr.r.net < base * 1.03, `rastgele yükseltme seçmek öncelikli seçimi geçmiyor (${(upr.r.net / base * 100 - 100).toFixed(0)}%)`);

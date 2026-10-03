@@ -269,7 +269,7 @@
         burst(o.x, o.y, o.golden);
         const combo = result.combo || 1;
         const tag = combo > 1.001 ? "x" + combo.toFixed(1) : null;
-        if (result.crisis) floatText(o.x, o.y - 30, "Karar ver!", "gold");
+        if (result.crisis) floatText(o.x, o.y - 30, "Karar!", "gold");
         else if (result.reward > 0) floatText(o.x, o.y - 30, "+₺" + result.reward, o.golden ? "gold" : "", tag);
         else if (result.special === "break") floatText(o.x, o.y - 30, "Arıza önlendi", "", null);
         restartAnim(o.el, "km-popped");

@@ -50,6 +50,9 @@
     $("app").dataset.screen = name;
     $("app").dataset.phase = name === "day" ? "day" : name === "evening" ? "evening" : name;
     window.scrollTo({ top: 0, behavior: "instant" in window ? "instant" : "auto" });
+    // sahne geçiş sınıfı (görsel katman isterse kullanır): gün başlarken "open", akşam başlarken "close" (600 ms)
+    const sc = document.querySelector("#screen-" + name + " .stage-card");
+    if (sc && (name === "day" || name === "evening")) { const c = name === "day" ? "open" : "close"; sc.classList.add(c); setTimeout(() => sc.classList.remove(c), 600); }
   }
   // Atmosfer kancaları: görsel katman (CSS/render) hava, olay ve günün saatine göre ton verebilsin
   function setAtmos(p) {
@@ -230,7 +233,7 @@
     const rentWd = WD_SHORT[(f.rentDay - 1) % 7];
     const rentTight = s.money < f.rentAmount * (f.rentIn <= 1 ? 0.7 : 0.35);
     if (f.grace > 0) chips.push('<span class="fchip good" title="Eski kaydın yeni sürüme taşındı: giderler yumuşak">🛟 Gider muafiyeti: ' + f.grace + " gün</span>");
-    else chips.push('<span class="fchip rent' + (f.rentToday ? " due" : "") + (rentTight && f.rentIn <= 3 ? " warn" : "") + '" title="Her Pazar akşamı haftalık kira düşer; seviyen yükseldikçe artar">🧾 Kira: ' + rentWd + " akşamı · " + inDays(f.rentIn) + " · <b>" + fmt(f.rentAmount) +
+    else chips.push('<span class="fchip rent' + (f.rentToday ? " due" : "") + (rentTight && f.rentIn <= 3 ? " warn" : "") + '" title="Her Pazar akşamı haftalık kira düşer; günler geçtikçe ve dükkân büyüdükçe artar">🧾 Kira: ' + rentWd + " akşamı · " + inDays(f.rentIn) + " · <b>" + fmt(f.rentAmount) +
       "</b>" + (rentTight && f.rentIn <= 3 ? " — kasan yetmeyebilir!" : "") + "</span>");
     chips.push('<span class="fchip" title="Elektrik, maaş ve aidatlar: her akşam düşer">🔌 Günlük gider: <b>' + fmt(f.utility) + "</b></span>");
     if (f.debt > 0) chips.push('<span class="fchip debt' + (f.debt > f.debtLimit * 0.7 ? " warn" : "") + '" title="Her gün faiz işler; kârının %40\'ı otomatik borca gider. Limiti aşarsan iflas!">⚠️ Borç: <b>' + fmt(f.debt) + "</b> / limit " + fmt(f.debtLimit) + " · " + f.debtDays + "/" + f.debtMaxDays +
@@ -420,7 +423,7 @@
     ep.textContent = "tahmini kâr ~" + rg(play);
     es.textContent = "~" + rg(skip) + " · başıboş";
     const diff = pv - sv;
-    tr.innerHTML = "🐈 Tahmin kesin değil. Hızlı geçersen baloncuklar çözülmez, <b>hırsız ×2</b> gelir, kriz kartları 'görmezden gel' olur" +
+    tr.innerHTML = "🐈 Tahmin kesin değil. Hızlı geçersen baloncuklar çözülmez, <b>hırsız ~×2</b> gelir, kriz kartları 'görmezden gel' olur" +
       (diff > 0 ? "; oynamak ortalama <b>+" + fmt(rnd(diff)) + "</b> kazandırır." : ".");
   }
   function flashCard(pid) {
@@ -596,7 +599,7 @@
     const sub = [w ? (w.emoji || "") + " " + w.name : "", ev ? (ev.emoji || "") + " " + ev.name : ""].filter(Boolean).join(" · ");
     const cell = (l, v, extra, cls) => '<div class="rcell ' + (cls || "") + '"><div class="l">' + l + '</div><div class="v">' + v + "</div>" + (extra ? '<div class="s">' + extra + "</div>" : "") + "</div>";
     const fx = s.fixed || { utility: 0, rent: 0, interest: 0, repaid: 0, shortfall: 0 };
-    const fixedTotal = fx.utility + fx.rent + fx.interest;
+    const fixedTotal = fx.utility + fx.rent + fx.interest + (fx.storage || 0);
     setAtmos(null); $("app").dataset.phase = "evening";
     let html = "<h2>" + (s.bankrupt ? "Gün " + s.day + " — iflas 🔒" : s.mode === "skip" ? "Gün " + s.day + " " + (s.forfeit ? "başıboş geçti" : "hızlıca bitti") + " ⏩" : "Gün " + s.day + " bitti! 🌙") + "</h2>" +
       '<div class="sub">' + esc(sub || "Kepenkler indi, sokak lambaları yandı.") + "</div>";
@@ -619,6 +622,7 @@
     const rows = [];
     rows.push(["🔌 Elektrik / maaş / aidat", fx.utility]);
     if (fx.rent) rows.push(["🧾 Haftalık kira", fx.rent]);
+    if (fx.storage) rows.push(["📦 Depolama / sigorta (raftaki stok)", fx.storage]);
     if (fx.interest) rows.push(["📉 Borç faizi", fx.interest]);
     html += '<div class="costs"><div class="costs-t">Akşam hesabı</div>' + rows.filter((r) => r[1] > 0 || r[0].indexOf("elektrik") > -1).map((r) => '<div class="crow"><span>' + r[0] + "</span><b>−" + fmt(r[1]).replace("₺", "₺") + "</b></div>").join("") +
       (fx.shortfall ? '<div class="crow bad"><span>⚠️ Ödenemeyen kısım borca yazıldı</span><b>' + fmt(fx.shortfall) + "</b></div>" : "") +
@@ -716,7 +720,7 @@
       cell("🔥 En iyi kombo", "x" + (+st.bestCombo || 1).toFixed(1)) + cell("🎯 Tutan hedef", st.goalsDone || 0) + cell("🏘️ Mutlu komşu", st.regularsServed || 0) +
       cell("💝 Bahşiş", fmt(st.tips || 0)) + cell("📦 Stoğa harcanan", fmt(st.stockSpent || 0)) + cell("🥀 Bozulan ürün", st.spoiled || 0) +
       cell("🕵️ Yakalanan hırsız", st.thievesCaught || 0) + cell("🧾 Ödenen kira", fmt(st.rentPaid || 0)) + cell("📉 Faiz", fmt(st.interestPaid || 0)) + cell("⚠️ En yüksek borç", fmt(st.debtPeak || 0)) +
-      cell("❓ Karar kartı", st.crisesResolved || 0) + cell("🔧 Bakım/tamir", fmt(st.repairSpent || 0)) + cell("🐷 Kumbara", st.piggyUsed || 0) + cell("📈 Alınan yükseltme", st.upgradesBought || 0) +
+      cell("❓ Karar kartı", st.crisesResolved || 0) + cell("🔧 Bakım/tamir", fmt(st.repairSpent || 0)) + cell("🐷 Kumbara", st.piggyUsed || 0) + cell("📈 Alınan yükseltme", st.upgradesBought || 0) + cell("🏆 Kazanılan sezon", st.seasonsWon || 0) +
       cell("💪 Oynayarak ek kazanç", fmt(st.playBonus || 0)) + cell("🏅 En iyi gün", fmt(st.bestDayNet || 0)) + cell("▶ Oynanan / ⏩ geçilen", (st.daysPlayed || 0) + " / " + (st.daysSkipped || 0)) + "</div>" +
       '<p class="fine endless-note">Dükkân açık kalıyor ama büyük dükkânın kirası da büyük! Sonsuz modda 10 günlük <b>sezon hedefleri</b> var: tutturursan ödül, kaçırırsan rakip ve kira biraz daha büyür.</p>' +
       '<button class="btn big red" id="btn-endless">Dükkân açık kalsın ☀️</button>';
