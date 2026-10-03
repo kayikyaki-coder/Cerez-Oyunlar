@@ -1,5 +1,6 @@
 /* Köşe Market — bubbles.css
-   Baloncuk katmanı (#bubble-layer) stilleri. Sahibi: baloncuk ajanı. */
+   Baloncuk katmanı (#bubble-layer) stilleri. Sahibi: baloncuk ajanı; görsel cila: görsel ajan.
+   Renkler style.css token'larıyla aynı (var() yoksa hex yedekleri devreye girer). */
 
 .km-layer {
   position: absolute; inset: 0; overflow: visible;
@@ -15,7 +16,8 @@
 
 /* ---------- Baloncuk ---------- */
 .km-bub {
-  --d: calc(64px * var(--km-s));
+  /* ölçek alt sınırı .8 (çekirdek ≥ 51 px): telefonda baloncuklar sahnede kaybolmasın */
+  --d: calc(64px * max(var(--km-s), 0.8));
   position: absolute; width: 0; height: 0;
   pointer-events: none;
 }
@@ -31,7 +33,9 @@
   touch-action: manipulation;
   animation: km-bob 2.6s ease-in-out infinite;
   animation-delay: var(--bob-d, 0s);
+  border-radius: 50%;
 }
+.km-float:focus-visible { outline: 3px solid var(--gold, #f2b134); outline-offset: 3px; }
 .km-shake { position: relative; }
 .km-body {
   position: relative; width: var(--d); height: var(--d);
@@ -46,15 +50,16 @@
     radial-gradient(circle at 50% 60%, var(--c1) 0 45%, var(--c2) 100%);
   border: 3px solid #fff;
   box-shadow:
-    inset 0 -6px 10px rgba(120, 60, 20, .10),
+    inset 0 -6px 10px rgba(120, 60, 20, .14),
     inset 0 5px 8px rgba(255, 255, 255, .75),
     0 4px 0 rgba(120, 70, 30, .10),
     0 8px 16px rgba(90, 45, 10, .18);
+  filter: saturate(.92);              /* flamalarla yarışmasın */
 }
 /* parlak cam yansıması */
 .km-core::before {
-  content: ''; position: absolute; left: 17%; top: 11%;
-  width: 34%; height: 22%; border-radius: 50%;
+  content: ''; position: absolute; left: 16%; top: 10%;
+  width: 38%; height: 24%; border-radius: 50%;
   background: linear-gradient(rgba(255,255,255,.95), rgba(255,255,255,.15));
   transform: rotate(-28deg); pointer-events: none;
 }
@@ -70,39 +75,45 @@
   position: relative; z-index: 1;
 }
 
-/* ömür halkası */
+/* ömür halkası: 8 px kalın; yeşil → sarı → kırmızı (renk + kalınlık/nabız ile ayırt edilir) */
 .km-ring {
   --p: 1; --rc: #54c386;
-  position: absolute; inset: -7px; border-radius: 50%;
+  position: absolute; inset: -9px; border-radius: 50%;
   background: conic-gradient(var(--rc) calc(var(--p) * 360deg), rgba(255,255,255,.7) 0);
-  -webkit-mask: radial-gradient(farthest-side, transparent calc(100% - 6px), #000 calc(100% - 5px));
-          mask: radial-gradient(farthest-side, transparent calc(100% - 6px), #000 calc(100% - 5px));
+  -webkit-mask: radial-gradient(farthest-side, transparent calc(100% - 8px), #000 calc(100% - 7px));
+          mask: radial-gradient(farthest-side, transparent calc(100% - 8px), #000 calc(100% - 7px));
   filter: drop-shadow(0 1px 1px rgba(0,0,0,.08));
 }
+/* son 1 sn: halkanın dışına kırmızı nabız (mask'lı halkanın dışında, gövdenin ::before'unda) */
+.km-body::before {
+  content: ''; position: absolute; inset: -9px; border-radius: 50%; pointer-events: none; opacity: 0;
+}
+.km-urgent .km-body::before { opacity: 1; animation: km-ring-pulse .5s ease-out infinite; }
 
-/* etiket hapı */
+/* etiket hapı: çekirdeğin alt kenarına biner (dikey ayak izi küçülür, komşularla çakışma azalır) */
 .km-label {
-  margin-top: 9px;
-  max-width: 150px;
+  position: relative; z-index: 2;
+  margin-top: -6px;
+  max-width: 136px;
   padding: 2px 9px 3px;
-  background: #fffaf2; color: #3a2a1f;
-  border: 2px solid #ffe2bd; border-radius: 999px;
+  background: var(--card, #fffaf2); color: var(--ink, #3a2a1f);
+  border: 2px solid var(--edge, #ffe4c0); border-radius: 999px;
   font-family: var(--font-b, 'Nunito', ui-rounded, system-ui, sans-serif); font-weight: 800;
-  font-size: calc(11.5px * min(var(--km-s), 1.1));
+  font-size: max(11.5px, calc(12px * min(var(--km-s), 1.1)));
   line-height: 1.2; text-align: center; white-space: nowrap;
   overflow: hidden; text-overflow: ellipsis;
-  box-shadow: 0 2px 0 rgba(120,70,30,.10);
+  box-shadow: 0 3px 0 rgba(120,70,30,.10);
 }
-.km-regular .km-label { white-space: normal; max-width: 170px; }
+.km-regular .km-label { white-space: normal; max-width: 128px; border-radius: 14px; }
 
-/* çok dokunuş noktaları */
+/* çok dokunuş noktaları: baloncuğun üst ortasında */
 .km-dots {
-  position: absolute; top: -12px; right: -14px; z-index: 2;
+  position: absolute; top: -15px; left: 50%; transform: translateX(-50%); z-index: 3;
   display: flex; gap: 3px; padding: 3px 5px;
-  background: #fff; border-radius: 999px; border: 2px solid #ffe2bd;
+  background: #fff; border-radius: 999px; border: 2px solid var(--edge, #ffe4c0);
   box-shadow: 0 2px 0 rgba(120,70,30,.12);
 }
-.km-dots i { width: 8px; height: 8px; border-radius: 50%; background: #eadbc6; display: block; }
+.km-dots i { width: 9px; height: 9px; border-radius: 50%; background: #eadbc6; display: block; }
 .km-dots i.on { background: #e3502c; box-shadow: inset 0 -2px 0 rgba(0,0,0,.15); }
 .km-dots i.km-dot-pop { animation: km-dot-pop .35s ease; }
 
@@ -116,8 +127,9 @@
     0 0 18px 4px rgba(255, 200, 60, .55),
     0 8px 16px rgba(120, 70, 0, .2);
   animation: km-glow 1.2s ease-in-out infinite;
+  filter: none;
 }
-.km-gold .km-label { background: #fff5d1; border-color: #ffd66b; color: #8a5a00; }
+.km-gold .km-label { background: #fff5d1; border-color: #ffd66b; color: #7a4e00; }
 .km-sparks { position: absolute; inset: -14px; pointer-events: none; z-index: 3; }
 .km-sparks i {
   position: absolute; font-style: normal; color: #ffb800; font-size: 17px; line-height: 1;
@@ -137,28 +149,43 @@
 .km-urgent .km-core { filter: saturate(1.25); }
 .km-dying .km-float { pointer-events: none; }
 .km-bub.km-popped .km-float { animation: km-pop-out .16s ease-out forwards; }
-.km-bub.km-popped .km-label, .km-bub.km-popped .km-dots, .km-bub.km-popped .km-ring { opacity: 0; transition: opacity .05s; }
+.km-bub.km-popped .km-label, .km-bub.km-popped .km-dots, .km-bub.km-popped .km-ring, .km-bub.km-popped .km-body::before { opacity: 0; transition: opacity .05s; }
 .km-bub.km-popped { animation: km-noop .24s forwards; }
 .km-bub.km-deflate .km-float { animation: km-deflate .7s ease-in forwards; }
 .km-bub.km-deflate { animation: km-noop .72s forwards; }
 .km-bub.km-deflate .km-core { filter: grayscale(.6) brightness(.95); transition: filter .4s; }
+.km-bub.km-deflate .km-body::before { opacity: 0; }
 .km-bub.km-solved .km-float, .km-bub.km-fade .km-float { animation: km-puff .5s ease-out forwards; }
 .km-bub.km-solved, .km-bub.km-fade { animation: km-noop .52s forwards; }
+/* sönerken iki küçük "pöf" dumanı */
+.km-bub.km-deflate::before, .km-bub.km-deflate::after {
+  content: ''; position: absolute; width: 14px; height: 14px; border-radius: 50%; pointer-events: none;
+  background: rgba(255,255,255,.92); filter: blur(2px); opacity: 0; z-index: 4;
+}
+.km-bub.km-deflate::before { left: -26px; top: 6px; animation: km-poof .6s .12s ease-out forwards; }
+.km-bub.km-deflate::after { left: 14px; top: 10px; width: 11px; height: 11px; animation: km-poof .6s .22s ease-out forwards; }
 
 /* ---------- Efektler ---------- */
 .km-burst { position: absolute; width: 0; height: 0; pointer-events: none; }
 .km-bit {
   position: absolute; left: 0; top: 0; border-radius: 50%;
   transform: translate(-50%, -50%);
-  animation: km-bit .7s cubic-bezier(.15, .8, .35, 1) forwards;
+  animation: km-bit .55s cubic-bezier(.15, .8, .35, 1) forwards;
   box-shadow: 0 1px 0 rgba(0,0,0,.08);
 }
+/* kırıntılar: daire / kare (satır içi) / yıldız karışımı */
+.km-bit:nth-child(3n + 1) { border-radius: 0; clip-path: polygon(50% 0, 62% 36%, 100% 38%, 70% 60%, 80% 100%, 50% 76%, 20% 100%, 30% 60%, 0 38%, 38% 36%); box-shadow: none; }
 .km-shock {
   position: absolute; left: 0; top: 0; width: 70px; height: 70px; border-radius: 50%;
   border: 4px solid rgba(255,255,255,.95);
   box-shadow: 0 0 0 2px rgba(255, 180, 140, .5);
   transform: translate(-50%, -50%) scale(.4);
   animation: km-shock .4s ease-out forwards;
+}
+/* ikinci halka 120 ms gecikmeli, ince ve altın */
+.km-shock::after {
+  content: ''; position: absolute; inset: -4px; border-radius: 50%; border: 2px solid var(--gold, #f2b134);
+  opacity: 0; animation: km-shock2 .42s .12s ease-out forwards;
 }
 .km-shock.gold { border-color: #ffe27a; box-shadow: 0 0 12px 2px rgba(255, 200, 60, .7); }
 
@@ -171,47 +198,63 @@
 }
 .km-ftxt-main {
   font-family: var(--font-t, 'Fredoka', ui-rounded, system-ui, sans-serif); font-weight: 700; font-size: 24px;
-  color: #2f9e54;
+  color: var(--green, #2f9e54);
   -webkit-text-stroke: 5px #fff; paint-order: stroke fill;
   text-shadow: 0 3px 0 rgba(47, 158, 84, .25);
+  font-variant-numeric: tabular-nums;
 }
-.km-ftxt.gold .km-ftxt-main { color: #e39a00; font-size: 28px; text-shadow: 0 3px 0 rgba(200, 130, 0, .3); }
+/* para yazısına iki bozuk para kırıntısı (CSS-only): öncesinde dönen para, sonrasında küçük yıldız */
+.km-ftxt::before {
+  content: '₺'; flex: none; width: 17px; height: 17px; border-radius: 50%; display: grid; place-items: center;
+  font: 700 10px/1 var(--font-t, 'Fredoka', sans-serif); color: #7a4e00;
+  background: radial-gradient(circle at 35% 30%, #ffe9a6, var(--gold, #f2b134) 70%); border: 2px solid var(--gold2, #c98a16);
+  box-shadow: 0 2px 0 rgba(120,70,30,.15); animation: km-coin-spin .6s ease-in-out 2;
+}
+.km-ftxt::after {
+  content: ''; flex: none; width: 9px; height: 9px; margin-left: -2px; align-self: flex-start;
+  background: #ffd34d; clip-path: polygon(50% 0, 62% 38%, 100% 50%, 62% 62%, 50% 100%, 38% 62%, 0 50%, 38% 38%);
+  animation: km-twinkle .8s ease-in-out 2;
+}
+.km-ftxt.bad::before, .km-ftxt.bad::after, .km-ftxt.helper::before, .km-ftxt.helper::after { display: none; }
+.km-ftxt.gold .km-ftxt-main { color: #b87400; font-size: 28px; text-shadow: 0 3px 0 rgba(200, 130, 0, .3); }
 .km-ftxt-tag {
   font-family: var(--font-t, 'Fredoka', ui-rounded, system-ui, sans-serif); font-weight: 700; font-size: 13px; color: #fff;
-  background: linear-gradient(#ff9d5c, #f26b3a); border-radius: 999px; padding: 2px 8px;
+  background: linear-gradient(#ff9d5c, #f26b3a); border-radius: 999px; padding: 2px 8px; border: 2px solid #fff;
   box-shadow: 0 2px 0 #c9502a; transform: rotate(-6deg);
+  text-shadow: 0 1px 0 rgba(120,40,10,.35);
 }
 .km-ftxt.bad { animation: km-sink 1.2s ease-out forwards; }
 .km-ftxt.bad .km-ftxt-main {
-  font-family: var(--font-b, 'Nunito', ui-rounded, system-ui, sans-serif); font-weight: 800; font-size: 14px; color: #d8452b;
-  -webkit-text-stroke: 4px #fff; text-shadow: none;
+  font-family: var(--font-b, 'Nunito', ui-rounded, system-ui, sans-serif); font-weight: 800; font-size: 14px; color: var(--red2, #c63d1d);
+  -webkit-text-stroke: 4px #fff; text-shadow: 0 2px 0 rgba(120,70,30,.10);
 }
 .km-ftxt.helper .km-ftxt-main {
-  font-family: var(--font-b, 'Nunito', ui-rounded, system-ui, sans-serif); font-weight: 800; font-size: 13px; color: #6b5a4a;
-  background: #fffaf2; border: 2px solid #ffe2bd; border-radius: 999px; padding: 2px 9px;
+  font-family: var(--font-b, 'Nunito', ui-rounded, system-ui, sans-serif); font-weight: 800; font-size: 13px; color: var(--ink2, #6b5443);
+  background: var(--card, #fffaf2); border: 2px solid var(--edge, #ffe4c0); border-radius: 999px; padding: 2px 9px;
   -webkit-text-stroke: 0; text-shadow: none; box-shadow: 0 2px 0 rgba(120,70,30,.1);
 }
 
-/* kombo göstergesi */
+/* kombo rozeti: küçük (18 px taban), 0,9 sn; tentenin hemen altında, sahnenin üst ortasında */
 .km-combo {
   --h: 48; --k: 1;
-  position: absolute; left: 50%; top: 6%;
+  position: absolute; left: 50%; top: 14%;
   transform: translate(-50%, 0) scale(0); opacity: 0;
   pointer-events: none; z-index: 12;
 }
 .km-combo-txt {
   display: block;
   font-family: var(--font-t, 'Fredoka', ui-rounded, system-ui, sans-serif); font-weight: 700;
-  font-size: calc(24px * var(--k) * min(var(--km-s), 1.1));
+  /* JS --k'yı 1…1,35 verir; artış yaklaşık yarıya indirilir (+0,2) */
+  font-size: calc(18px * (1 + (var(--k) - 1) * 0.57) * min(var(--km-s), 1.1));
   color: #fff; white-space: nowrap;
-  padding: 5px 18px 7px; border-radius: 999px;
-  background: linear-gradient(hsl(calc(var(--h) * 1deg) 96% 66%), hsl(calc((var(--h) - 10) * 1deg) 88% 56%));
+  padding: 3px 14px 5px; border-radius: 999px;
+  background: linear-gradient(hsl(calc(var(--h) * 1deg) 96% 62%), hsl(calc((var(--h) - 10) * 1deg) 88% 50%));
   border: 3px solid #fff;
-  box-shadow: 0 4px 0 hsl(calc((var(--h) - 12) * 1deg) 70% 42%), 0 8px 18px rgba(90, 40, 10, .22);
-  text-shadow: 0 2px 0 rgba(0, 0, 0, .18);
+  box-shadow: 0 3px 0 hsl(calc((var(--h) - 12) * 1deg) 70% 38%), 0 6px 14px rgba(90, 40, 10, .22);
+  text-shadow: 0 2px 0 rgba(0, 0, 0, .22);
 }
 .km-combo.km-max .km-combo-txt { animation: km-hue 0.6s ease-in-out infinite alternate; }
-.km-combo.km-show { animation: km-combo-in 1.25s cubic-bezier(.3, 1.6, .5, 1) forwards; }
+.km-combo.km-show { animation: km-combo-in .9s cubic-bezier(.3, 1.6, .5, 1) forwards; }
 
 /* ---------- Keyframes ---------- */
 @keyframes km-noop { to { opacity: 1; } }
@@ -237,6 +280,10 @@
   50% { transform: translate(1.5px, -.5px) rotate(2deg); }
   75% { transform: translate(-1px, -.5px) rotate(-1deg); }
 }
+@keyframes km-ring-pulse {
+  0% { box-shadow: 0 0 0 0 rgba(239, 107, 91, .45); }
+  100% { box-shadow: 0 0 0 7px rgba(239, 107, 91, 0); }
+}
 @keyframes km-pop-out {
   0% { transform: translate(-50%, -50%) scale(1); opacity: 1; }
   35% { transform: translate(-50%, -50%) scale(1.2); opacity: .8; }
@@ -247,18 +294,27 @@
   30% { transform: translate(-50%, -50%) scale(1.06, .9); }
   100% { transform: translate(-50%, calc(-50% + 16px)) scale(.4, .3); opacity: 0; }
 }
+@keyframes km-poof {
+  0% { transform: translateY(0) scale(.5); opacity: 0; }
+  25% { opacity: .9; }
+  100% { transform: translateY(-18px) scale(1.5); opacity: 0; }
+}
 @keyframes km-puff {
   0% { transform: translate(-50%, -50%) scale(1); opacity: 1; filter: blur(0); }
   100% { transform: translate(-50%, calc(-50% - 12px)) scale(1.2); opacity: 0; filter: blur(4px); }
 }
 @keyframes km-bit {
-  0% { transform: translate(-50%, -50%) scale(1.3); opacity: 1; }
+  0% { transform: translate(-50%, -50%) scale(1.3) rotate(0); opacity: 1; }
   55% { opacity: 1; }
-  100% { transform: translate(calc(-50% + var(--dx)), calc(-50% + var(--dy) + 14px)) scale(.3); opacity: 0; }
+  100% { transform: translate(calc(-50% + var(--dx)), calc(-50% + var(--dy) + 18px)) scale(.3) rotate(180deg); opacity: 0; }
 }
 @keyframes km-shock {
   0% { transform: translate(-50%, -50%) scale(.4); opacity: 1; }
   100% { transform: translate(-50%, -50%) scale(1.5); opacity: 0; border-width: 1px; }
+}
+@keyframes km-shock2 {
+  0% { transform: scale(.7); opacity: .9; }
+  100% { transform: scale(1.35); opacity: 0; }
 }
 @keyframes km-rise {
   0% { transform: translate(-50%, -50%) scale(.5); opacity: 0; }
@@ -270,8 +326,9 @@
   0% { transform: translate(-50%, -50%) scale(.7); opacity: 0; }
   15% { transform: translate(-50%, -50%) scale(1); opacity: 1; }
   75% { opacity: 1; }
-  100% { transform: translate(-50%, calc(-50% + 14px)); opacity: 0; }
+  100% { transform: translate(-50%, calc(-50% + 10px)); opacity: 0; }
 }
+@keyframes km-coin-spin { 0%, 100% { transform: scaleX(1); } 50% { transform: scaleX(.2); } }
 @keyframes km-glow {
   50% { box-shadow:
     inset 0 -6px 10px rgba(180, 110, 0, .18), inset 0 5px 8px rgba(255, 255, 255, .8),
@@ -284,14 +341,19 @@
 @keyframes km-dot-pop { 40% { transform: scale(1.8); } }
 @keyframes km-combo-in {
   0% { transform: translate(-50%, 0) scale(.3) rotate(-8deg); opacity: 0; }
-  18% { transform: translate(-50%, 0) scale(1.12) rotate(2deg); opacity: 1; }
-  30% { transform: translate(-50%, 0) scale(1) rotate(-1deg); }
+  20% { transform: translate(-50%, 0) scale(1.1) rotate(2deg); opacity: 1; }
+  34% { transform: translate(-50%, 0) scale(1) rotate(-1deg); }
   80% { transform: translate(-50%, 0) scale(1); opacity: 1; }
-  100% { transform: translate(-50%, -10px) scale(.95); opacity: 0; }
+  100% { transform: translate(-50%, -8px) scale(.95); opacity: 0; }
 }
 @keyframes km-hue { to { filter: hue-rotate(-18deg) brightness(1.08); } }
 
 @media (prefers-reduced-motion: reduce) {
   .km-float { animation: none; }
-  .km-urgent .km-shake { animation-duration: .3s; }
+  .km-urgent .km-shake { animation: none; }
+  .km-urgent .km-body::before { animation: none; box-shadow: 0 0 0 4px rgba(239, 107, 91, .35); }
+  .km-gold .km-core { animation: none; }
+  .km-sparks i { animation: none; opacity: .8; }
+  .km-bit { display: none; }
+  .km-ftxt::before, .km-ftxt::after { animation: none; }
 }
