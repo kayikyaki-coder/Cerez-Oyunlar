@@ -872,10 +872,11 @@
   }
   function paintLampsStatic(ctx) {
     lampXs().forEach((x, i) => {
-      ctx.strokeStyle = "#6b4a33"; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(x, 44); ctx.lineTo(x, 70); ctx.stroke();
-      ctx.fillStyle = i % 2 ? "#f2b134" : "#8ecae6"; ctx.beginPath(); ctx.moveTo(x - 18, 86); ctx.lineTo(x - 8, 68); ctx.lineTo(x + 8, 68); ctx.lineTo(x + 18, 86); ctx.fill();
-      ctx.fillStyle = "rgba(255,255,255,.3)"; ctx.beginPath(); ctx.moveTo(x - 12, 82); ctx.lineTo(x - 6, 70); ctx.lineTo(x - 2, 70); ctx.lineTo(x - 8, 82); ctx.fill();
-      circle(ctx, x, 88, 5, "#fff0b8");
+      ctx.strokeStyle = "#6b4a33"; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(x, 44); ctx.lineTo(x, 90); ctx.stroke();
+      ctx.fillStyle = i % 2 ? "#f2b134" : "#8ecae6"; ctx.beginPath(); ctx.moveTo(x - 20, 112); ctx.lineTo(x - 9, 90); ctx.lineTo(x + 9, 90); ctx.lineTo(x + 20, 112); ctx.closePath(); ctx.fill();
+      ctx.strokeStyle = "rgba(90,60,40,.35)"; ctx.lineWidth = 1.5; ctx.stroke();
+      ctx.fillStyle = "rgba(255,255,255,.32)"; ctx.beginPath(); ctx.moveTo(x - 14, 108); ctx.lineTo(x - 7, 93); ctx.lineTo(x - 3, 93); ctx.lineTo(x - 9, 108); ctx.fill();
+      circle(ctx, x, 113, 5, "#fff0b8");
     });
   }
   function lampXs() {
@@ -1425,7 +1426,7 @@
     ctx.globalCompositeOperation = "screen";
     if (!dark && Lt.sa > 0.004) { ctx.fillStyle = rgba(Lt.s, Lt.sa); ctx.fillRect(v.x0, 0, vw, H); }
     if (wk === "fog") { ctx.fillStyle = "rgba(255,255,255,.06)"; ctx.fillRect(v.x0, 0, vw, H); }
-    if (dark) CANDLES.forEach(([x, y], i) => { const fl = S.reduce ? 1 : 0.88 + Math.sin(S.time * 9 + i * 2) * 0.12; const g = ctx.createRadialGradient(x, y - 16, 2, x, y - 16, 150); g.addColorStop(0, "rgba(255,207,122," + (0.5 * fl).toFixed(2) + ")"); g.addColorStop(1, "rgba(255,207,122,0)"); ctx.fillStyle = g; ctx.fillRect(x - 150, y - 166, 300, 300); });
+    if (dark) CANDLES.forEach(([x, y], i) => { const fl = S.reduce ? 1 : 0.88 + Math.sin(S.time * 9 + i * 2) * 0.12; const g = ctx.createRadialGradient(x, y - 16, 2, x, y - 16, 150); g.addColorStop(0, "rgba(255,200,110," + (0.8 * fl).toFixed(2) + ")"); g.addColorStop(1, "rgba(255,207,122,0)"); ctx.fillStyle = g; ctx.fillRect(x - 150, y - 166, 300, 300); });
     // gökkuşağı: zemine iki renkli hafif ışık bandı
     if (S.ekind === "rainbow" && S.mode === "day") { ctx.fillStyle = "rgba(255,150,170,.06)"; ctx.beginPath(); ctx.moveTo(30, FLOOR_Y + 10); ctx.lineTo(210, FLOOR_Y + 10); ctx.lineTo(340, H); ctx.lineTo(150, H); ctx.fill(); ctx.fillStyle = "rgba(140,200,255,.06)"; ctx.beginPath(); ctx.moveTo(210, FLOOR_Y + 10); ctx.lineTo(260, FLOOR_Y + 10); ctx.lineTo(400, H); ctx.lineTo(340, H); ctx.fill(); }
     ctx.globalCompositeOperation = "lighter";
@@ -1434,7 +1435,7 @@
     if (on > 0.02) {
       const cone = coneSprite(), pulse = S.reduce ? 1 : 0.96 + Math.sin(S.time * 2.1) * 0.04;
       ctx.globalAlpha = clamp(on * 0.34 * pulse, 0, 1);
-      lampXs().forEach(x => ctx.drawImage(cone.cv, x - cone.lw / 2, 88, cone.lw, cone.lh));
+      lampXs().forEach(x => ctx.drawImage(cone.cv, x - cone.lw / 2, 112, cone.lw, cone.lh));
       ctx.globalAlpha = 1;
     }
     ctx.restore();
@@ -1446,7 +1447,7 @@
       ctx.beginPath(); ctx.ellipse(x + fl * .3, y - 19, 1.6, 3.6, 0, 0, Math.PI * 2); ctx.fillStyle = "#fff3b0"; ctx.fill();
     });
     // lamba ampulleri akşam parlar
-    if (on > 0.3) { ctx.save(); ctx.globalAlpha = clamp(on, 0, 1); lampXs().forEach(x => circle(ctx, x, 88, 5.5, "#fffbe0")); ctx.restore(); }
+    if (on > 0.3) { ctx.save(); ctx.globalAlpha = clamp(on, 0, 1); lampXs().forEach(x => circle(ctx, x, 113, 5.5, "#fffbe0")); ctx.restore(); }
   }
   function drawSignText(ctx) {
     if (!(S.upg.sign || S.upg.grand)) return;
@@ -1523,8 +1524,8 @@
       S.prodSig = ps;
       S.L.prod = mkLayer(204, 96, 380, 328); paintProducts(S.L.prod.ctx);
     }
-    // gökyüzü ~30 fps (hareket azaltmada 8 fps) tazelenir; pencere ve kapı aynı kaynak
-    const iv = S.reduce ? 0.125 : 1 / 30;
+    // gökyüzü ~30 fps (düşük güçte 15, hareket azaltmada 8 fps) tazelenir; pencere ve kapı aynı kaynak
+    const iv = S.reduce ? 0.125 : S.lowPower ? 1 / 15 : 1 / 30;
     if (S.time - S.skyT >= iv || S.time < S.skyT) {
       S.skyT = S.time;
       const w = L.win, d = L.door, a = S.L.skyW, b = S.L.skyD;
