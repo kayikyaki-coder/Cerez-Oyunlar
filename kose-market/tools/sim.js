@@ -241,7 +241,7 @@ function evalFrom(st, P, nDays, seed, mod) {
 }
 function roiReport(log) {
   // Anlık görüntüler iki yoldan alınır (dikkatli ve ortalama oyuncu); her kalem uygun görüntülerde iki oyun tarzıyla (dikkatli/ortalama) denenir.
-  const DAYS = [10, 16, 24, 32, 40, 48], N = opt.quick ? 4 : 6;
+  const DAYS = [3, 5, 8, 12, 18, 26, 34, 42], N = opt.quick ? 4 : 6;
   const seeds = SEEDS.slice(0, Math.min(opt.quick ? 4 : 8, SEEDS.length));
   const snaps = [];
   for (const sd of seeds) for (const who of ["dikkatli", "ortalama"]) for (const s of snapshots(byName(who), sd, DAYS)) snaps.push(Object.assign(s, { seed: sd }));
@@ -249,9 +249,9 @@ function roiReport(log) {
   log("ROI: " + snaps.length + " anlık görüntü (gün " + DAYS.join("/") + "; dikkatli+ortalama yollar), her biri " + N + " gün, iki oyun tarzı; Δ = günlük (kâr − günlük gider) farkı; geri dönüş = maliyet/Δ (gün)");
   log("kalem                    | maliyet | Δ dikkatli | geri dön. | Δ ortalama | geri dön. | Δ atla | geri dön. | örnek | hüküm (en iyi tarz)");
   const rows = [];
-  const evalItem = (label, cost, apply, canApply) => {
+  const evalItem = (label, cost, apply, canApply, list) => {
     const ds = [[], [], []];
-    for (const s of snaps) {
+    for (const s of (list || snaps)) {
       Game.state = clone(s.st);
       if (!canApply(Game.state)) continue;
       styles.forEach((P, k) => {
@@ -271,8 +271,12 @@ function roiReport(log) {
     u.levels.forEach((lv, i) => evalItem(`${u.id}-${i + 1}`, lv.cost, S0 => { S0.upgrades[u.id] = i + 1; },
       S0 => (S0.upgrades[u.id] || 0) === i && S0.level >= Math.max(u.unlockLevel || 1, lv.minLevel || 1) && (!u.req || S0.upgrades[u.req])));
   }
+  // erken ürünler (simit, süt…) için sentetik erken-oyun durumları: oyuncular bunları ilk günlerde açtığı için anlık görüntülerde yok
+  const synth = [];
+  for (const sd of seeds.slice(0, 6)) for (const d of [3, 6, 10]) { Game.newGame(sd, opt.diff); const S0 = Game.state; S0.day = d; S0.level = 3; S0.rep = 170; S0.money = 600; Game.state = S0; Game.fillAll(); synth.push({ st: clone(Game.state), seed: sd }); }
   for (const p of PRODUCTS) {
     if (!(p.unlockCost > 0)) continue;
+    if (p.unlockLevel <= 2) { evalItem("ürün:" + p.id, p.unlockCost, S0 => { S0.unlocked[p.id] = true; S0.prices[p.id] = 1; }, S0 => !S0.unlocked[p.id], synth); continue; }
     evalItem("ürün:" + p.id, p.unlockCost, S0 => { S0.unlocked[p.id] = true; S0.prices[p.id] = 1; },
       S0 => !S0.unlocked[p.id] && S0.level >= p.unlockLevel && (!p.cold || (S0.upgrades.buzdolabi || 0) > 0));
   }

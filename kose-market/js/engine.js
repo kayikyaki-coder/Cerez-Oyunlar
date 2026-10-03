@@ -565,7 +565,7 @@ const Game = (() => {
   const EQUIP = { fridge: { name: "Buzdolabı", emoji: "🧊" }, register: { name: "Yazar Kasa", emoji: "🧾" } };
   const equipOwned = eq => eq === "register" || (eq === "fridge" && upgradeLevel("buzdolabi") > 0);
   function breakChance(cond) {
-    return clamp((B("equipBreakFrom", 65) - cond) / B("equipBreakFrom", 65), 0, 1) * B("equipBreakMaxChance", 0.55) * D("breakdown", 1);
+    return clamp((B("equipBreakFrom", 65) - cond) / B("equipBreakFrom", 65), 0, 1) * B("equipBreakMaxChance", 0.7) * D("breakdown", 1);
   }
   function serviceCost(eq) {
     const base = eq === "fridge" ? B("equipServiceFridge", 90) : B("equipServiceRegister", 60);
@@ -589,7 +589,7 @@ const Game = (() => {
     for (const eq of ["fridge", "register"]) {
       const r = u();
       if (!equipOwned(eq)) continue;
-      const base = eq === "fridge" ? B("equipWearFridge", 12) : B("equipWearRegister", 8);
+      const base = eq === "fridge" ? B("equipWearFridge", 16) : B("equipWearRegister", 11);
       let w = base * (1 + B("equipWearJitter", 0.4) * (r * 2 - 1)) * e.wearMult * (eq === "register" ? e.regWear : 1);
       if (S.broken[eq]) w = 0;
       S.equip[eq] = clamp(S.equip[eq] - w, 0, 100);
@@ -811,7 +811,7 @@ const Game = (() => {
   }
   function customerBuy(c, out) {
     // Kasa bozukken kuyruk uzar: bazı müşteriler beklemeden gider
-    if (S.broken.register && c.regU < B("regLostCustomerShare", 0.3)) {
+    if (S.broken.register && c.regU < B("regLostCustomerShare", 0.4)) {
       run.missedCustomers++; run.regLost++;
       emit(out, { type: "customerMiss", cid: c.cid, productId: c.want[0].pid, reason: "register" });
       changeSat(B("satPerMiss", -1.5), out); goalCheck(out);

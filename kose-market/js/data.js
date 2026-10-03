@@ -36,7 +36,7 @@ const BALANCE = {
   browseSec: 2.5,
   customerStartSec: 1,
   customerLeaveSec: 1.2,
-  regLostCustomerShare: 0.3,  // kasa bozukken gelen müşterinin eli boş dönme ihtimali
+  regLostCustomerShare: 0.4,  // kasa bozukken gelen müşterinin eli boş dönme ihtimali
   trafficMax: 0.45,           // ürün çeşitliliğinin (rafta duran açık ürünler) müşteri artışı tavanı
 
   // --- Fiyat ayarı ve esnek talep ---
@@ -120,11 +120,11 @@ const BALANCE = {
   thiefLife: 3.2,
 
   // --- Ekipman (dolap / kasa) ---
-  equipWearFridge: 12,        // günlük yıpranma (durum puanı)
-  equipWearRegister: 8,
+  equipWearFridge: 16,        // günlük yıpranma (durum puanı)
+  equipWearRegister: 11,
   equipWearJitter: 0.4,
   equipBreakFrom: 65,         // durum bunun altına inince arıza riski başlar
-  equipBreakMaxChance: 0.55,  // durum 0'da günlük arıza ihtimali
+  equipBreakMaxChance: 0.7,  // durum 0'da günlük arıza ihtimali
   equipQuickFixCond: 45,      // baloncuğa basınca durum en az bu olur (arıza önlenir)
   equipServiceFridge: 90,     // bakım/tamir taban ücreti (₺) — seviye ile artar
   equipServiceRegister: 60,
@@ -282,7 +282,7 @@ const UPGRADES = [
   { id: "raf", name: "Ek Raf", emoji: "🧺", cat: "dukkan", unlockLevel: 1, scene: "raf",
     desc: "Toplam raf yuvası artar: daha çok çeşit/stok, daha az 'bitti!'. Fazla stok bozulur ve nakit bağlar.",
     levels: [
-      { cost: 180,  effect: { slots: 12 }, desc: "+12 yuva" },
+      { cost: 120,  effect: { slots: 12 }, desc: "+12 yuva" },
       { cost: 450,  effect: { slots: 18 }, desc: "+18 yuva", minLevel: 3 },
       { cost: 900,  effect: { slots: 26 }, desc: "+26 yuva", minLevel: 5 },
       { cost: 1600, effect: { slots: 36 }, desc: "+36 yuva", minLevel: 7 }
@@ -305,7 +305,7 @@ const UPGRADES = [
     desc: "Yerler daha az kirlenir: kaygan zemin tazminatı ve 'leke' baloncukları azalır.",
     levels: [
       { cost: 180, effect: { bubbleWeightMult: { clean: 0.6, stain: 0.7 } }, desc: "Kapıya paspas: çamur ve leke azalır" },
-      { cost: 700, effect: { bubbleWeightMult: { clean: 0.5, stain: 0.6 }, upkeep: 2 }, desc: "Robot süpürge 'Vınvın' (günlük −₺2 şarj)", minLevel: 6 }
+      { cost: 450, effect: { bubbleWeightMult: { clean: 0.5, stain: 0.6 }, upkeep: 2 }, desc: "Robot süpürge 'Vınvın' (günlük −₺2 şarj)", minLevel: 6 }
     ] },
   { id: "buzdolabi", name: "Buzdolabı", emoji: "🧊", cat: "dukkan", unlockLevel: 3, scene: "buzdolabi",
     desc: "Soğuk ürünler (süt, peynir, dondurma, pasta, çiçek) dolap olmadan %30 az satar; taze ürünlerin ömrü 2,5 kat uzar. Ama elektrik yer, yıpranır, bozulabilir.",
@@ -313,8 +313,8 @@ const UPGRADES = [
   { id: "toptanci", name: "Toptancı Anlaşması", emoji: "🤝", cat: "dukkan", unlockLevel: 3, scene: null,
     desc: "Hasan Abi'yle el sıkıştın: alış fiyatları düşer, ama üyelik aidatı var.",
     levels: [
-      { cost: 500,  effect: { costMult: 0.92, upkeep: 4 }, desc: "Alışta %8 indirim · günlük −₺4 aidat" },
-      { cost: 1400, effect: { costMult: 0.92, upkeep: 4 }, desc: "Alışta toplam ~%15 indirim · günlük −₺8", minLevel: 6 }
+      { cost: 450,  effect: { costMult: 0.88, upkeep: 3 }, desc: "Alışta %12 indirim · günlük −₺3 aidat" },
+      { cost: 1300, effect: { costMult: 0.91, upkeep: 4 }, desc: "Alışta toplam ~%20 indirim · günlük −₺7", minLevel: 6 }
     ] },
   { id: "vitrin", name: "Işıklı Vitrin", emoji: "🪟", cat: "dukkan", unlockLevel: 5, scene: "vitrin",
     desc: "Göz alıcı vitrin: yoldan geçen içeri girer, sepetler dolar. Elektrik yer.",
@@ -331,12 +331,12 @@ const UPGRADES = [
   { id: "sadakat", name: "Sadakat Kartı", emoji: "💳", cat: "dukkan", unlockLevel: 4, scene: null,
     desc: "Mahalleli kartını cebinden çıkarmadan rakibe gitmez: Zincir Market'in müşteri çekmesi azalır.",
     levels: [
-      { cost: 450,  effect: { rivalGuard: 0.18, upkeep: 2 }, desc: "Rakibe giden müşteri −%18 · günlük −₺2 basım" },
-      { cost: 1100, effect: { rivalGuard: 0.17, upkeep: 4 }, desc: "Puan toplama: rakip etkisi toplam −%35 · günlük −₺6", minLevel: 7 }
+      { cost: 450,  effect: { rivalGuard: 0.22, upkeep: 2 }, desc: "Rakibe giden müşteri −%22 · günlük −₺2 basım" },
+      { cost: 1100, effect: { rivalGuard: 0.18, upkeep: 4 }, desc: "Puan toplama: rakip etkisi toplam −%40 · günlük −₺6", minLevel: 7 }
     ] },
   { id: "depo", name: "Soğuk Hava Deposu", emoji: "🏭", cat: "dukkan", unlockLevel: 9, scene: null, req: "buzdolabi",
     desc: "Arkadaki depoyu soğutucuya çevir: devasa raf alanı ve taze ürünlere +1 gece ömür. Pahalı işletilir.",
-    levels: [ { cost: 3200, effect: { slots: 44, lifeBonus: 1, upkeep: 14 }, desc: "+44 yuva, taze ürün +1 gece · günlük −₺14" } ] },
+    levels: [ { cost: 2800, effect: { slots: 52, lifeBonus: 1, upkeep: 12 }, desc: "+52 yuva, taze ürün +1 gece · günlük −₺12" } ] },
 
   // ---------- PERSONEL ----------
   { id: "cirak", name: "Çırak Ali", emoji: "🧑‍🍳", cat: "personel", unlockLevel: 3, scene: "cirak",
@@ -361,8 +361,8 @@ const UPGRADES = [
   { id: "bitkiler", name: "Saksı Bitkileri", emoji: "🪴", cat: "dekor", unlockLevel: 2, scene: "bitkiler",
     desc: "Çiçekli giriş mahalleliyi mutlu eder: memnuniyet kolay artar, rakibe giden müşteri azalır. Sulamak masraf.",
     levels: [
-      { cost: 200, effect: { satGain: 1.15, satFloor: 3, rivalGuard: 0.05, upkeep: 1 }, desc: "Fesleğen: rakip etkisi −%5 · günlük −₺1" },
-      { cost: 650, effect: { satGain: 1.1, satFloor: 4, rivalGuard: 0.05, upkeep: 1 }, desc: "Monstera: rakip −%10 toplam · günlük −₺2", minLevel: 5 }
+      { cost: 200, effect: { satGain: 1.15, satFloor: 3, rivalGuard: 0.06, upkeep: 1 }, desc: "Fesleğen: rakip etkisi −%6 · günlük −₺1" },
+      { cost: 450, effect: { satGain: 1.1, satFloor: 4, rivalGuard: 0.1, upkeep: 1 }, desc: "Monstera: rakip −%16 toplam · günlük −₺2", minLevel: 5 }
     ] },
   { id: "lamba", name: "Sarı Işıklı Lamba", emoji: "💡", cat: "dekor", unlockLevel: 3, scene: "lamba",
     desc: "Sıcacık ışık: müşteriler oyalanır, bahşiş bırakır, cam buğulanmaz. Elektrik yer.",
