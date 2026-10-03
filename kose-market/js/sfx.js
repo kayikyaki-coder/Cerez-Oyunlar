@@ -66,6 +66,74 @@
 
   const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 
+  // ---------- gürültü (ambiyans, süpürme sesleri) ----------
+  let noiseBuffer = null;
+  function noiseBuf(c) {
+    if (noiseBuffer) return noiseBuffer;
+    const len = c.sampleRate * 2, buf = c.createBuffer(1, len, c.sampleRate), d = buf.getChannelData(0);
+    for (let i = 0; i < len; i++) d[i] = Math.random() * 2 - 1;
+    noiseBuffer = buf; return buf;
+  }
+  // Filtreli gürültü süpürmesi: from→to Hz (bandpass), dur sn
+  function sweep(o) {
+    const c = ensure();
+    if (!c || Sfx.muted) return;
+    try {
+      const t0 = c.currentTime + (o.delay || 0), dur = o.dur || 0.3;
+      const src = c.createBufferSource(); src.buffer = noiseBuf(c);
+      const f = c.createBiquadFilter(); f.type = o.type || "bandpass"; f.Q.value = o.q || 0.8;
+      f.frequency.setValueAtTime(o.from, t0); f.frequency.exponentialRampToValueAtTime(o.to, t0 + dur);
+      const g = c.createGain(); g.gain.setValueAtTime(0.0001, t0);
+      g.gain.exponentialRampToValueAtTime(o.vol || 0.2, t0 + (o.attack || 0.03)); g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+      src.connect(f); f.connect(g); g.connect(master);
+      src.start(t0, Math.random()); src.stop(t0 + dur + 0.05);
+    } catch (e) { /* sessizce yut */ }
+  }
+
+  // Ortam sesi: hava durumuna göre tek döngü; sessize alınınca ya da sekme gizlenince durur
+  let amb = null, ambKind = null;
+  function stopAmbNodes() {
+    if (!amb) return;
+    const a = amb; amb = null;
+    try {
+      if (a.timer) clearInterval(a.timer);
+      if (a.gain && ctx) { a.gain.gain.cancelScheduledValues(ctx.currentTime); a.gain.gain.setTargetAtTime(0.0001, ctx.currentTime, 0.15); }
+      setTimeout(() => { try { a.nodes.forEach(n => { if (n.stop) n.stop(); n.disconnect(); }); if (a.gain) a.gain.disconnect(); } catch (e) {} }, 700);
+    } catch (e) { /* yut */ }
+  }
+  function startAmb(kind) {
+    stopAmbNodes();
+    if (Sfx.muted) return;
+    const c = ensure(); if (!c) return;
+    try {
+      const nodes = []; let timer = 0;
+      const out = c.createGain(); out.gain.setValueAtTime(0.0001, c.currentTime); out.connect(master);
+      const noise = (freq, vol, type) => {
+        const src = c.createBufferSource(); src.buffer = noiseBuf(c); src.loop = true;
+        const f = c.createBiquadFilter(); f.type = type || "lowpass"; f.frequency.value = freq;
+        src.connect(f); f.connect(out); src.start(); nodes.push(src, f);
+        out.gain.setTargetAtTime(vol, c.currentTime, 0.6);
+        return f;
+      };
+      if (kind === "rain") noise(900, 0.05);
+      else if (kind === "snow") noise(380, 0.018);
+      else if (kind === "wind") {
+        noise(400, 0.05);
+        const lfo = c.createOscillator(), lg = c.createGain(); lfo.frequency.value = 0.22; lg.gain.value = 0.03; lfo.connect(lg); lg.connect(out.gain); lfo.start(); nodes.push(lfo, lg);
+      } else if (kind === "hot") {
+        out.gain.setTargetAtTime(1, c.currentTime, 0.2);
+        timer = setInterval(() => { if (Sfx.muted) return; const f = 3900 + Math.random() * 300; [0, 0.07, 0.14].forEach(d => tone({ type: "sine", freq: f, dur: 0.035, vol: 0.025, delay: d, attack: 0.002 })); }, 1200);
+      } else { out.disconnect(); return; }
+      amb = { kind, nodes, gain: out, timer };
+    } catch (e) { amb = null; }
+  }
+  if (typeof document !== "undefined") {
+    document.addEventListener("visibilitychange", () => {
+      if (!ctx) return;
+      try { if (document.hidden) ctx.suspend(); else if (ctx.state === "suspended") ctx.resume(); } catch (e) {}
+    });
+  }
+
   const Sfx = {
     muted: readMuted(),
 
@@ -73,6 +141,7 @@
       Sfx.muted = !!b;
       try { localStorage.setItem(MUTE_KEY, Sfx.muted ? "1" : "0"); } catch (e) {}
       if (master && ctx) { try { master.gain.setTargetAtTime(Sfx.muted ? 0 : MASTER_VOL, ctx.currentTime, 0.02); } catch (e) {} }
+      if (Sfx.muted) stopAmbNodes(); else if (ambKind && !amb) startAmb(ambKind);
     },
     toggle() { Sfx.setMuted(!Sfx.muted); return Sfx.muted; },
 
@@ -110,18 +179,72 @@
         tone({ type: "sine", freq: f * 2.76, dur: 0.45, vol: 0.07, delay: d, attack: 0.004 });
         tone({ type: "sine", freq: f * 5.4, dur: 0.18, vol: 0.03, delay: d, attack: 0.002 });
       };
-      bell(1319, 0); bell(1047, 0.22);
+      Sfx.whoosh();                       // perde açılır
+      bell(1319, 0.12); bell(1047, 0.34);
     },
-    // Gün bitti — yavaş, inen üç nota
+    // Gün bitti — yavaş, inen üç nota; 1 sn sonra kepenk "şrrk"
     dayEnd() {
       [784, 659, 523].forEach((f, i) =>
         tone({ type: "sine", freq: f, dur: i === 2 ? 0.8 : 0.35, vol: 0.28, delay: i * 0.18, attack: 0.02 }));
       tone({ type: "triangle", freq: 262, dur: 0.9, vol: 0.08, delay: 0.36, attack: 0.03 });
+      Sfx.shutter(1.0);
+      Sfx.stopAmbient();
     },
     // Arayüz tıkı
     click() {
       tone({ type: "sine", freq: 880, to: 1200, glide: 0.02, dur: 0.05, vol: 0.2 });
     },
+
+    // ---- Sahne sesleri (render.js olaylarından çağrılır; hepsi sessiz-güvenli) ----
+    // Müşteri girişinde kısa kapı zili: ~1 kHz, 0,25 sn
+    bell() {
+      tone({ type: "sine", freq: 1046, dur: 0.25, vol: 0.18, attack: 0.004 });
+      tone({ type: "sine", freq: 1046 * 2.76, dur: 0.1, vol: 0.035, attack: 0.003 });
+    },
+    // Rüzgârda sallanan zil: daha yumuşak
+    bellSoft() {
+      tone({ type: "sine", freq: 1175, dur: 0.3, vol: 0.07, attack: 0.01 });
+      tone({ type: "sine", freq: 1568, dur: 0.22, vol: 0.04, attack: 0.01, delay: 0.05 });
+    },
+    // Raftan ürün alınca küçük "tık"
+    shelf() {
+      tone({ type: "triangle", freq: 220, to: 150, glide: 0.04, dur: 0.05, vol: 0.2, attack: 0.002 });
+    },
+    // Kasa "çın-çın" (coin'in kısası)
+    register() {
+      tone({ type: "triangle", freq: 1568, dur: 0.06, vol: 0.15, attack: 0.002 });
+      tone({ type: "triangle", freq: 2093, dur: 0.16, vol: 0.13, delay: 0.06, attack: 0.002 });
+    },
+    // Pamuk mırıltısı: 60 Hz sine + tremolo, 0,4 sn
+    purr() {
+      const c = ensure();
+      if (!c || Sfx.muted) return;
+      try {
+        const t0 = c.currentTime, dur = 0.5;
+        const osc = c.createOscillator(), g = c.createGain(), lfo = c.createOscillator(), lg = c.createGain();
+        osc.type = "sine"; osc.frequency.value = 62; lfo.frequency.value = 24; lg.gain.value = 0.22;
+        g.gain.setValueAtTime(0.0001, t0); g.gain.exponentialRampToValueAtTime(0.32, t0 + 0.08); g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+        lfo.connect(lg); lg.connect(g.gain); osc.connect(g); g.connect(master);
+        osc.start(t0); lfo.start(t0); osc.stop(t0 + dur + 0.05); lfo.stop(t0 + dur + 0.05);
+        // alçak frekans küçük hoparlörde duyulmaz: bir oktav üstte yumuşak eşlik
+        tone({ type: "sine", freq: 124, dur: dur * 0.9, vol: 0.12, attack: 0.08 });
+      } catch (e) { /* yut */ }
+    },
+    // Gün başı perde "vuu"
+    whoosh(delay) {
+      sweep({ from: 300, to: 1800, dur: 0.35, vol: 0.12, delay: delay || 0, attack: 0.12 });
+    },
+    // Kepenk inerken "şrrk": aşağı süpüren gürültü
+    shutter(delay) {
+      sweep({ from: 2600, to: 380, dur: 0.55, vol: 0.12, delay: delay || 0, q: 1.1 });
+    },
+    // Hava ortamı: "rain" | "snow" | "wind" | "hot"; diğerleri sessiz
+    ambient(kind) {
+      ambKind = kind || null;
+      if (!ambKind || ambKind === "sun" || ambKind === "cloud" || ambKind === "fog") { stopAmbNodes(); return; }
+      startAmb(ambKind);
+    },
+    stopAmbient() { ambKind = null; stopAmbNodes(); },
   };
 
   window.Sfx = Sfx;
