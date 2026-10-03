@@ -4,7 +4,8 @@
   "use strict";
 
   const W = 960, H = 540;          // mantıksal sahne
-  const MIN_DIST = 64;             // baloncuklar arası en az mesafe (mantıksal px)
+  const MIN_DIST = 64;             // baloncuklar arası en az yatay mesafe (mantıksal px)
+  const MIN_DIST_Y = 84;           // dikey mesafe: etiket hapı için ek pay
   const BOUNDS = { x0: 48, x1: W - 48, y0: 56, y1: H - 64 };
   let minDist = MIN_DIST;          // ekran ölçeğine göre güncellenir (küçük ekranda baloncuklar sahneye göre iridir)
   const view = { x0: 0, x1: W };   // görünen mantıksal x aralığı (Render.setView ile aynı tutulur)
@@ -72,7 +73,7 @@
     const ok = (px, py) => {
       for (const o of live.values()) {
         if (o.dying) continue;
-        if (Math.hypot(o.x - px, o.y - py) < minDist) return false;
+        if (Math.hypot((o.x - px) / minDist, (o.y - py) / (minDist * MIN_DIST_Y / MIN_DIST)) < 1) return false;
       }
       return true;
     };
@@ -143,15 +144,19 @@
   }
 
   // Ceza metni: BUBBLE_TYPES[type].penalty'den türet
+  // Kaçırma metni: gerçek bedeli söyler (önde tire yok; para cezası seviye/zorlukla büyüdüğü için "~")
   function penaltyText(b) {
     const def = typeDef(b);
+    if (def && def.special === "crisis") return "Fırsat kaçtı";
+    if (def && def.special === "thief") return "Hırsız mal götürdü";
+    if (def && def.special === "break") return "Arıza! Sabah tamir";
     const p = (def && def.penalty) || b.penalty || null;
     if (!p || !Object.keys(p).length) return null;
-    if (p.lostCustomers) return "müşteri kaçtı";
-    if (p.money) return "−₺" + Math.abs(p.money);
-    if (p.sat) return "memnuniyet ↓";
-    if (p.lostSalesSec) return "satış durdu";
-    return "kaçırdın";
+    if (p.lostCustomers) return "Müşteri kaçtı";
+    if (p.lostSalesSec) return "Satış durdu";
+    if (p.money) return "~₺" + Math.abs(p.money) + " zarar";
+    if (p.sat) return "Memnuniyet " + p.sat;
+    return "Kaçırdın";
   }
 
   function kill(id) {
@@ -264,12 +269,14 @@
         burst(o.x, o.y, o.golden);
         const combo = result.combo || 1;
         const tag = combo > 1.001 ? "x" + combo.toFixed(1) : null;
-        floatText(o.x, o.y - 30, "+₺" + (result.reward || 0), o.golden ? "gold" : "", tag);
+        if (result.crisis) floatText(o.x, o.y - 30, "Karar ver!", "gold");
+        else if (result.reward > 0) floatText(o.x, o.y - 30, "+₺" + result.reward, o.golden ? "gold" : "", tag);
+        else if (result.special === "break") floatText(o.x, o.y - 30, "Arıza önlendi", "", null);
         restartAnim(o.el, "km-popped");
         removeAfterAnim(o.el, 600);
         sfx("pop", combo);
-        if (result.reward) setTimeout(() => sfx("coin"), 60);
-        if (this.autoCombo && combo > 1.001) this.comboFlash(combo);
+        if (result.reward > 0) setTimeout(() => sfx("coin"), 60);
+        if (this.autoCombo && combo > 1.001 && !result.crisis) this.comboFlash(combo);
       } else {
         o.tapsLeft = result.tapsLeft != null ? result.tapsLeft : Math.max(0, o.tapsLeft - 1);
         buildDots(o);
@@ -289,7 +296,7 @@
       } else {
         const txt = penaltyText(o.b);
         restartAnim(o.el, txt ? "km-deflate" : "km-fade");
-        if (txt) { floatText(o.x, o.y - 26, txt[0] === "−" ? txt : "− " + txt, "bad"); sfx("miss"); }
+        if (txt) { floatText(o.x, o.y - 26, txt, "bad"); sfx("miss"); }
       }
       removeAfterAnim(o.el, 1200);
     },
@@ -301,13 +308,14 @@
       lastComboAt = now; lastComboVal = combo;
       if (!comboEl || !comboEl.isConnected) {
         comboEl = el("div", "km-combo", layer);
-        el("span", "km-combo-txt", comboEl);
+        const t = el("span", "km-combo-txt", comboEl);
+        el("b", "", t); el("small", "", t, "KOMBO");
       }
       const t = clamp((combo - 1) / 1, 0, 1);      // 0 → x1.0, 1 → x2.0
       comboEl.style.setProperty("--h", (48 - t * 48).toFixed(0));  // sarı → turuncu → pembe-kırmızı
       comboEl.style.setProperty("--k", (1 + t * 0.35).toFixed(3));
       comboEl.classList.toggle("km-max", combo >= 1.999);
-      comboEl.firstChild.textContent = (combo >= 1.999 ? "🔥 " : "") + "Kombo x" + combo.toFixed(1) + "!";
+      comboEl.firstChild.firstChild.textContent = (combo >= 1.999 ? "🔥 " : "") + "x" + combo.toFixed(1);
       restartAnim(comboEl, "km-show");
       clearTimeout(comboTimer);
       comboTimer = setTimeout(function hide() {
@@ -341,6 +349,7 @@
     get paused() { return paused; },
     count() { return live.size; },
     has(id) { return live.has(id); },
+    pos(id) { const o = live.get(id); return o ? { x: o.x, y: o.y } : null; },
   };
 
   window.Bubbles = Bubbles;

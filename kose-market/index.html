@@ -9,6 +9,8 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <!-- Fontlar engellemeden yüklenir: çevrimdışıyken sayfa beklemez, yuvarlak sistem fontlarına düşer -->
 <link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@400;500;600;700&family=Nunito:wght@600;700;800;900&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
+<!-- mech.css: mekanik panelleri (kira/borç/fiyat/ekipman/kriz kartı). style.css'ten önce yüklenir → aynı seçicide style.css kazanır -->
+<link rel="stylesheet" href="mech.css">
 <link rel="stylesheet" href="style.css">
 <link rel="stylesheet" href="bubbles.css">
 </head>
@@ -59,9 +61,13 @@
         <div class="daycard" id="daycard"></div>
       </div>
 
+      <div class="mech-hint hidden" id="hint-box"></div>
       <div class="pamuk-tip" id="morning-tip"></div>
+      <div class="fin-strip" id="fin-strip"></div>
+      <div class="equip-panel hidden" id="equip-panel"></div>
 
       <div class="sec-head"><span>🧺 Stok &amp; Raflar</span><i class="line"></i><span class="sec-note" id="cap-note"></span></div>
+      <div class="slot-bar" id="slot-bar"></div>
       <div class="fill-row">
         <button class="btn teal" id="btn-fill">🧮 Dengeli Doldur <small>talebe göre</small></button>
         <div class="stock-summary" id="stock-summary"></div>
@@ -106,6 +112,7 @@
       </div>
       <div class="stage-card day-stage">
         <div class="stage-slot" data-slot="day"></div>
+        <div class="mech-bar" id="mech-bar"></div>
       </div>
       <div class="chips" id="chips"></div>
       <div class="day-info" id="day-info"></div>
@@ -150,6 +157,7 @@
   <!-- Overlay'ler -->
   <div class="overlay hidden" id="ov-levelup" role="dialog" aria-modal="true">
     <div class="ov-panel levelup">
+      <div class="lv-confetti" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
       <div class="lv-badge" id="lv-badge">2</div>
       <h2>Seviye atladın!</h2>
       <div class="lv-title" id="lv-title"></div>
@@ -174,6 +182,7 @@
   <div class="overlay hidden" id="ov-settings" role="dialog" aria-modal="true">
     <div class="ov-panel settings">
       <h2>Ayarlar ⚙️</h2>
+      <p class="fine settings-diff" id="settings-diff"></p>
       <button class="btn big cream wide" id="btn-mute">🔊 Ses: Açık</button>
       <button class="btn big cream wide" id="btn-home">🏠 Ana Menü</button>
       <button class="btn big danger wide" id="btn-reset">🗑️ Oyunu Sıfırla</button>
@@ -192,6 +201,31 @@
       </div>
     </div>
   </div>
+
+  <div class="overlay hidden" id="ov-diff" role="dialog" aria-modal="true">
+    <div class="ov-panel diff">
+      <h2>Zorluk seç 🎚️</h2>
+      <p class="fine">Zorluk sadece gelir değil; kira, rakip, hırsız, arıza, kriz ve baloncuk süresini de değiştirir. Oyun başladıktan sonra değişmez.</p>
+      <div class="diff-list" id="diff-list"></div>
+      <div class="ov-actions"><button class="btn cream" id="btn-diff-cancel">Vazgeç</button></div>
+    </div>
+  </div>
+
+  <div class="overlay hidden" id="ov-bankrupt" role="dialog" aria-modal="true">
+    <div class="ov-panel bankrupt">
+      <div class="intro-cat">🔒</div>
+      <h2>İflas!</h2>
+      <p id="bankrupt-text"></p>
+      <div class="bk-stats" id="bankrupt-stats"></div>
+      <div class="ov-actions col">
+        <button class="btn red" id="btn-bk-new">✨ Yeniden Başla</button>
+        <button class="btn gold hidden" id="btn-bk-check">⏪ Son Kayıttan Devam</button>
+        <button class="btn cream" id="btn-bk-home">🏠 Ana Menü</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="crisis-card hidden" id="crisis-card" role="dialog" aria-live="assertive"></div>
 
   <div class="toasts" id="toasts" aria-live="polite"></div>
 </div>

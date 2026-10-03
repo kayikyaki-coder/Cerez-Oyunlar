@@ -1,251 +1,417 @@
 // data.js — Köşe Market'in tüm içeriği ve denge sayıları (DOM yok, Node'da da çalışır)
 // Denge sayıları tools/sim.js ile ayarlandı (rapor: tools/BALANCE_REPORT.md). Şema: CONTRACT.md
+// Motorda "sihirli sayı" yok: engine.js her anahtarı B(k, d) ile okur ve d burada yazılanla aynıdır.
 
 // =====================================================================
-// DENGE SAYILARI — motor içinde "sihirli sayı" olmasın, hepsi burada
+// DENGE SAYILARI
 // =====================================================================
 const BALANCE = {
   // --- Gün ---
-  dayLength: 75,              // sn (1x hızda bir iş günü) — ~50 oyun günü × (75 sn + sabah/akşam) ≈ 80 dk
+  dayLength: 75,              // sn (1x hızda bir iş günü)
   skipTickDt: 0.25,           // "Hızlı Geç" headless simülasyonda tick adımı (sn)
-  speedOptions: [1, 2],       // oyun hızı seçenekleri (2x'te baloncuk ömrü de hızlanır)
-  closingQuietSec: 3,         // son N sn yeni müşteri/baloncuk doğmaz (gün toparlansın)
+  closingQuietSec: 3,         // son N sn yeni müşteri/baloncuk doğmaz
 
   // --- Para ---
-  startMoney: 40,             // yeni oyunda cepteki para (₺)
-  startStock: { elma: 4, ekmek: 4 }, // yeni oyunda rafta hazır duran ürünler (Pamuk'un sürprizi)
-  piggyBank: 20,              // "Pamuk'un kumbarası": para < en ucuz ürün ve stok yok → +20₺ (günde 1)
-  emergencyCostMult: 1.5,     // "📦 bitti" baloncuğuna basınca acil tedarik alış çarpanı
+  startMoney: 40,             // yeni oyunda cepteki para (₺) — zorluk seviyesi ezer
+  startStock: { elma: 4, ekmek: 4 },
+  piggyBank: 25,              // "Pamuk'un kumbarası": para < en ucuz ürün ve stok yok → +₺ (günde 1, oyun boyu sınırlı: DIFFICULTIES.piggy)
+  emergencyCostMult: 1.7,     // "📦 bitti" baloncuğuna basınca acil tedarik alış çarpanı
   emergencyQty: 3,            // acil tedarikte en fazla kaç adet gelir
-  fillHeadroom: 1.2,          // "Dengeli Doldur" beklenen talebin bu katı kadar alır (+1)
-  spoilFraction: 0.35,        // buzdolabı yoksa taze ürünlerin gün sonu kaybolan oranı (~üçte biri)
+  fillZ: 2,                 // "Dengeli Doldur": hedef stok = beklenen talep + z·√talep (rastgele dalgalanmaya pay)
+
+  // --- Raf yuvası (toplam depo) ---
+  totalSlotsBase: 44,         // dükkânın toplam raf yuvası (ürünler `slots` yuva kaplar; Ek Raf/Depo artırır)
 
   // --- Müşteri ---
-  baseCustomers: 18,          // gün 1 taban müşteri sayısı
-  customerGrowthPerDay: 0.15, // her gün +0.15 müşteri (mahalle dükkânı tanıdıkça)
-  customerGrowthPerLevel: 1.2,// her itibar seviyesi +1.2 müşteri
-  customersMax: 80,           // güvenlik tavanı (tüm çarpanlardan sonra)
-  customerJitter: 0.1,        // günlük müşteri sayısına ±%10 tohumlu sapma
-  itemsPerCustomer: 1,        // müşteri başına taban alınan ürün adedi
-  extraItemChance: 0.3,       // her müşteri %30 ihtimalle 1 ürün daha alır (tekrar denenir, en fazla maxItems)
-  maxItemsPerCustomer: 3,     // bir müşterinin sepeti en fazla
-  shelfCapBase: 10,           // ürün başı raf kapasitesi (Ek Raf yükseltmesiyle artar)
-  customerSpawnJitter: 0.35,  // müşteri geliş aralıklarına ±%35 rastgelelik
-  browseSec: 2.5,             // müşterinin rafta dolaşma süresi (görsel + satış zamanlaması)
+  baseCustomers: 16,
+  customerGrowthPerDay: 0.12,
+  customerGrowthPerLevel: 1.1,
+  customersMax: 90,
+  minCustomers: 4,
+  customerJitter: 0.1,
+  itemsPerCustomer: 1,
+  extraItemChance: 0.3,
+  maxItemsPerCustomer: 3,
+  customerSpawnJitter: 0.35,
+  browseSec: 2.5,
+  customerStartSec: 1,
+  customerLeaveSec: 1.2,
+  regLostCustomerShare: 0.3,  // kasa bozukken gelen müşterinin eli boş dönme ihtimali
+  trafficMax: 0.45,           // ürün çeşitliliğinin (rafta duran açık ürünler) müşteri artışı tavanı
 
-  // --- Kombo ---
-  comboWindow: 2.5,           // sn — son pop'tan bu kadar süre içinde basılırsa kombo artar (baloncuklar seyrek doğduğu için geniş)
-  comboStep: 0.25,            // her ardışık pop +0.25 (x1.25 → x1.5 → x1.75 → x2.0)
-  comboMax: 2.0,              // kombo tavanı
-  comboResetOnMiss: true,     // bir baloncuk patlayıp kaçarsa kombo 1.0'a döner
+  // --- Fiyat ayarı ve esnek talep ---
+  priceTiers: [0.85, 1, 1.2], // Ucuz / Normal / Pahalı çarpanları
+  priceTierNames: ["Ucuz", "Normal", "Pahalı"],
+  priceStoreGamma: 1.0,       // 1 = her ürünün talebi kendi fiyatına bağımsız tepki verir (üs)
+  priceStoreMin: 0.4,
+  priceStoreMax: 1.5,
+  heatHot: 1.3,               // talep/standart oranı bu kadarsa ürün "aranıyor" → müşteri fiyata daha az duyarlı
+  heatCold: 0.6,              // bu kadarsa "ilgi yok" → daha duyarlı
+  heatHotMult: 0.55,
+  heatColdMult: 1.35,
+  rivalCompare: 0.9,          // rakip varken fiyat duyarlılığı bu kadar artar (karşılaştırma yapılır)
+  demandFloor: 0.05,
 
   // --- Memnuniyet (sat, 0..100) ---
-  satStart: 70,               // yeni oyunda memnuniyet
-  satFloor: 15,               // en düşük memnuniyet (upgrade'ler satFloor ile yükseltir)
-  satMax: 100,                // tavan
-  satPerSale: 0.4,            // mutlu satış başına +0.4
-  satPerMiss: -1.5,           // istediğini bulamayan müşteri başına -1.5
-  satNightTarget: 65,         // gece memnuniyet bu değere doğru yavaşça döner
-  satNightPull: 0.3,          // gece dönüş oranı (%30 yaklaşır)
-  satMid: 60,                 // bu değerde yarının müşteri çarpanı 1.0
-  satCustomerSwing: 0.15,     // sat 100'de +%15, sat 20'de -%15 müşteri (doğrusal, ±0.15'e kırpılır)
+  satStart: 70,
+  satFloor: 15,
+  satMax: 100,
+  satPerSale: 0.4,
+  satPerMiss: -1.5,
+  satNightTarget: 65,
+  satNightPull: 0.5,
+  satMid: 60,
+  satCustomerSwing: 0.22,     // sat 100'de +%22, sat 20'de -%22 müşteri
+  rivalLoyaltyHi: 1.5,        // rakip payı çarpanı = clamp(1.5 - sat/100, 0.5, 1.5): memnun müşteri rakibe gitmez
+  rivalLoyaltyLo: 0.5,
+
+  // --- Kombo ---
+  comboWindow: 2.5,
+  comboStep: 0.25,
+  comboMax: 2.0,
+  comboResetOnMiss: true,
 
   // --- İtibar (rep XP) ---
-  repPerSale: 1,              // satılan her ürün adedi +1 XP
-  repPerSatPoint: 0.1,        // gün sonu memnuniyetinin %10'u XP (sat 70 → +7)
-  repPerGoal: 8,              // hedef tamamlanınca (goal.reward.rep yoksa) varsayılan XP
-  repPerRegular: 3,           // mahalle sakininin isteği karşılanınca +3 XP
-  repPerBubble: 0.2,          // pop edilen her baloncuk +0.2 XP (oynamanın küçük bir itibar ödülü)
+  repPerSale: 1,
+  repPerSatPoint: 0.1,
+  repPerGoal: 8,
+  repPerRegular: 3,
+  repPerBubble: 0.2,
+  repPerCatch: 1.5,           // hırsız yakalayınca
 
   // --- Baloncuklar ---
-  bubbleRateBase: 0.10,       // sn başına baloncuk doğma hızı (gün 1: ~7 sabit + raf/sakin baloncukları ≈ 11–13/gün)
-  bubbleRatePerLevel: 0.012,  // her itibar seviyesi +0.012/sn
-  bubbleRatePerDay: 0.0015,   // her gün +0.0015/sn (yavaş yavaş hareketlenir)
-  bubbleRateMax: 0.25,        // tavan (~18 sabit + raf/sakin ≈ 22–24 baloncuk/gün; olay/hava bubbleMult ile ±%25)
-  bubbleMaxOnScreen: 5,       // aynı anda ekranda en fazla baloncuk (dinamikler dahil)
-  bubbleMinGapSec: 0.6,       // iki baloncuk arası en az süre
-  bubbleRewardPerLevel: 0.03, // günlük ödül çarpanı = 1 + (level-1)*0.03 (düz tutuldu: geç oyunda fark ~%20–25 kalsın, erken %35–40)
-  bubblePenaltyPerLevel: 0.05, // "money" cezaları da 1 + (level-1)*0.05 ile büyür
-  lostSalesSecDefault: 10,    // penalty.lostSalesSec belirtilmemiş ama ürün bağlı baloncukta varsayılan
-  bubbleRewardMult: 1.0,      // tüm baloncuk ödüllerine global çarpan (oyna/atla farkı ayar düğmesi; <1 farkı azaltır)
+  bubbleStartSec: 2,
+  bubbleRateBase: 0.11,       // sn başına sabit baloncuk doğma hızı
+  bubbleRatePerLevel: 0.012,
+  bubbleRatePerDay: 0.0015,
+  bubbleRateMax: 0.27,
+  bubbleMaxOnScreen: 7,
+  bubbleMinGapSec: 0.6,
+  bubbleDeferSec: 0.5,
+  bubbleRewardPerLevel: 0.03,
+  bubblePenaltyPerLevel: 0.07, // para cezaları 1 + (level-1)*0.07 ile büyür
+  bubbleLifeMinSec: 2.0,
+  bubbleLifePerLevel: -0.012, // seviye başına baloncuk ömrü çarpanı değişimi (en çok -%20)
+  bubbleLifeFloorMult: 0.8,
+  bubbleRewardMult: 1.0,
+  lostSalesSecDefault: 10,
+  lostCustomersMult: 1,
+  restockMaxPerProduct: 3,
+  zoneSlots: { shelf: 6, floor: 4, register: 2, door: 2, fridge: 1, window: 2, cat: 1 },
+
+  // --- Salvo (yoğun saat: art arda doğan baloncuk grupları) ---
+  salvoStartDay: 6,
+  salvoBase: 0.5,             // günlük beklenen salvo sayısı = base + perDay*gün (tavan max)
+  salvoPerDay: 0.03,
+  salvoMax: 2.6,
+  salvoMinSize: 2,
+  salvoMaxSize: 4,
+  salvoSpacingSec: 0.28,
+
+  // --- Hırsızlık ---
+  theftStartDay: 5,
+  theftBase: 0.6,            // günlük beklenen hırsız sayısı = base + perDay*gün (tavan max)
+  theftPerDay: 0.015,
+  theftMax: 1.6,
+  theftSkipMult: 1.8,         // başıboş dükkân (Hızlı Geç): hırsız sayısı ×1,8
+  theftQtyBase: 3,            // çalınan adet = base + seviye/levelDiv
+  theftLevelDiv: 4,
+  thiefLife: 3.2,
+
+  // --- Ekipman (dolap / kasa) ---
+  equipWearFridge: 12,        // günlük yıpranma (durum puanı)
+  equipWearRegister: 8,
+  equipWearJitter: 0.4,
+  equipBreakFrom: 65,         // durum bunun altına inince arıza riski başlar
+  equipBreakMaxChance: 0.55,  // durum 0'da günlük arıza ihtimali
+  equipQuickFixCond: 45,      // baloncuğa basınca durum en az bu olur (arıza önlenir)
+  equipServiceFridge: 90,     // bakım/tamir taban ücreti (₺) — seviye ile artar
+  equipServiceRegister: 60,
+  equipServiceLevelStep: 0.07,
+  equipMaintainFrac: 0.55,    // arızasızken bakım ücreti = tamirin bu kadarı
+  equipMinMaintainCond: 90,   // durum bundan yüksekse bakım gerekmez
+
+  // --- Raf ömrü ---
+  fridgeLifeMult: 2.5,        // buzdolabı taze ürünlerin ömrünü çarpar
+  noFridgeMult: 0.7,          // soğuk ürünlerin (süt, peynir, dondurma, pasta, çiçek) talebi dolap yoksa/bozuksa bu kadar
+  freshLifeMax: 12,           // shelfLife bu değerin altındaysa "taze" sayılır (UI etiketi)
+
+  // --- Giderler / borç / iflas ---
+  utilityStartDay: 3,         // günlük sabit gider başlangıcı
+  utilityBase: 6,             // günlük elektrik/su (₺); yükseltmelerin `upkeep`i eklenir (maaş, elektrik, bakım)
+  rentFirstDay: 14,           // ilk kira günü (Pazar akşamı); sonra her 7 günde
+  rentBase: 130,              // haftalık kira (Sv.1)
+  rentPerLevel: 140,           // her seviye +₺
+  rentWeekday: 7,             // gün % 7 === 0 → Pazar akşamı
+  debtInterest: 0.03,         // günlük borç faizi (zorluk çarpanı ile)
+  debtRepayFrac: 0.4,         // pozitif günlük kârın bu kadarı otomatik borca gider
+  debtLimitBase: 150,         // iflas sınırı = base + perLevel*(sv-1) (zorluk çarpanı ile)
+  debtLimitPerLevel: 90,
+  debtMaxDays: 14,            // kesintisiz bu kadar gün borçluysa iflas
+  checkpointEvery: 7,         // "Son Kayıttan Devam" noktası: her Pazartesi sabahı
 
   // --- Bahşiş & sakinler ---
-  tipChance: 0.08,            // mutlu müşterinin bahşiş bırakma ihtimali
-  tipMin: 1, tipMax: 4,       // bahşiş aralığı (₺), seviye ile bubbleRewardPerLevel çarpanıyla büyür
-  regularsPerDayMax: 2,       // bir günde en fazla kaç mahalle sakini uğrar
-  regularChance: 0.6,         // uygun her sakinin o gün gelme ihtimali (sonra max'a kırpılır)
-  regularQty: 1,              // sakin baloncuğuna basınca sevdiği üründen kaç adet alır
-  regularTip: 3,              // sakinin baloncuğuna basınca taban bahşiş (₺, seviye çarpanlı)
+  tipChance: 0.08,
+  tipMin: 1, tipMax: 4,
+  regularsPerDayMax: 2,
+  regularChance: 0.6,
+  regularQty: 1,
+  regularTip: 3,
+  regularColor: "#ffd6e0",
+  regularNoStockTipMult: 0.5,
+  regularSat: 2,
+  regularMissSat: 0,
+  regularLife: 6,
+  regularReward: 3,
 
   // --- Günün hedefi ---
-  goalScalePerDay: 0.025,     // scaleWithDay:true hedeflerde hedef ve para ödülü × (1 + 0.025*(gün-1))
-  eventChance: 0.55,          // sabit olmayan günlerde bir olay çıkma ihtimali (yoksa GENERIC_GOALS)
+  goalScalePerDay: 0.025,
+  eventChance: 0.55,
+  eventStartDay: 2,
 
-  // --- Fiyat / talep ---
-  demandFloor: 0.05,          // hava/olay çarpanlarından sonra en düşük talep ağırlığı
-  unlockRepHint: true         // UI: kilitli ürünlerde "Sv. N'de açılır" göster
+  // --- Kriz kartları ---
+  crisisStartDay: 4,
+  crisisBase: 0.45,           // günlük beklenen kriz sayısı = base + perDay*gün (tavan max)
+  crisisPerDay: 0.012,
+  crisisMax: 1.6,
+  crisisBubbleLife: 6.5,
+  crisisDecideSec: 9,         // kart açıldıktan sonra karar süresi (dolunca "görmezden gel")
+  crisisMinGapSec: 16,
+  crisisMoneyPerLevel: 0.1,   // kriz ₺ tutarları 1 + (sv-1)*0.1 ile büyür
+  crisisSatValue: 2.5,        // bot hesabı: 1 memnuniyet puanı ≈ ₺
+  crisisCustomerValue: 14,    // bot hesabı: 1 müşteri ≈ ₺
+
+  // --- Sonsuz mod (final sonrası) ---
+  seasonLen: 10,              // gün
+  seasonGoalBase: 4200,       // 1. sezon kâr hedefi (₺, operasyonel kâr toplamı)
+  seasonGoalGrowth: 1.15,
+  seasonReward: 0.12,         // hedefin %12'si ödül
+  seasonRivalStep: 0.04,      // her sezon rakip payı +
+  seasonRentStep: 0.12,       // her sezon kira +%
+
+  // --- Çırak otomatiği ---
+  autoSolveMax: 0.9,
+  perfectReactSec: 0.6,
+  tapGapSec: 0.18
+};
+
+// =====================================================================
+// ZORLUK SEVİYELERİ — sadece gelir çarpanı değil, mekaniklerin yoğunluğu da değişir.
+//  rent: kira + günlük gider · rival: rakip baskısı · rivalOpen: rakibin açılış günü kayması
+//  life: raf ömrü çarpanı · crisis/theft/breakdown: sıklık · bubbleLife: baloncuk ömrü · penalty: kaçırma cezası
+//  priceSens: fiyat duyarlılığı · debtLimit: iflas sınırı · interest: faiz · customers: müşteri çarpanı
+//  piggy: Pamuk kumbarası hakkı (oyun boyu) · checkpoint: iflasta "Son Kayıttan Devam" var mı · rentFirstShift: ilk kira gününü kaydırır
+// =====================================================================
+const DIFFICULTIES = {
+  kolay:  { id: "kolay", name: "Kolay", emoji: "🌱", tag: "Rahat başlangıç",
+    desc: "Ucuz kira, geç gelen ve yumuşak bir rakip, uzun ömürlü baloncuklar, bol kumbara. Hikâyeyi keyifle gör.",
+    startMoney: 80, rentFirstShift: 7, rent: 0.65, rivalAggro: 0.6, rivalOpen: 5, life: 1.3, crisis: 0.6, theft: 0.6, breakdown: 0.6,
+    bubbleLife: 1.3, penalty: 0.7, priceSens: 0.85, debtLimit: 1.7, interest: 0.5, customers: 1.06, piggy: 5, checkpoint: true, utility: 0.6 },
+  normal: { id: "normal", name: "Normal", emoji: "🛒", tag: "Dikkatli oyuncuya adil",
+    desc: "Kira ve borç gerçek, rakip 12. günde açılır, hırsız ve kriz var. Dikkatli oynarsan kazanırsın; ihmal edersen batarsın.",
+    startMoney: 40, rentFirstShift: 0, rent: 1, rivalAggro: 1, rivalOpen: 0, life: 1, crisis: 1, theft: 1, breakdown: 1,
+    bubbleLife: 1, penalty: 1, priceSens: 1, debtLimit: 1, interest: 1, customers: 1, piggy: 3, checkpoint: true, utility: 1 },
+  zor:    { id: "zor", name: "Zor", emoji: "🔥", tag: "Her karar önemli",
+    desc: "Ağır kira, erken ve saldırgan rakip, sık hırsız/arıza, kısa baloncuklar, tek kumbara. Hata affetmez.",
+    startMoney: 40, rentFirstShift: -7, rent: 1.3, rivalAggro: 1.4, rivalOpen: -3, life: 0.8, crisis: 1.35, theft: 1.35, breakdown: 1.35,
+    bubbleLife: 0.85, penalty: 1.3, priceSens: 1.15, debtLimit: 0.75, interest: 1.4, customers: 0.97, piggy: 1, checkpoint: true, utility: 1.25 },
+  efsane: { id: "efsane", name: "Mahalle Efsanesi", emoji: "👑", tag: "Tek can",
+    desc: "Çok ağır kira, 7. günde rakip, kısacık baloncuklar, kumbara yok, iflasta 'Son Kayıttan Devam' yok. Sadece efsaneler.",
+    startMoney: 30, rentFirstShift: -7, rent: 1.6, rivalAggro: 1.8, rivalOpen: -5, life: 0.65, crisis: 1.7, theft: 1.7, breakdown: 1.7,
+    bubbleLife: 0.72, penalty: 1.6, priceSens: 1.3, debtLimit: 0.55, interest: 1.8, customers: 0.94, piggy: 0, checkpoint: false, utility: 1.5 }
+};
+const DIFF_ORDER = ["kolay", "normal", "zor", "efsane"];
+
+// =====================================================================
+// RAKİP: ZİNCİR MARKET (kalıcı, gün 12'de açılır) — fiyatı karşılaştırılır, müşteri çeker
+// =====================================================================
+const RIVAL = {
+  name: "Zincir Market", emoji: "🏬",
+  openDay: 12,
+  baseShare: 0.12,            // açıldığında müşterilerin bu kadarı rakibe gider
+  shareGrowthPerDay: 0.004,   // her gün +
+  shareMax: 0.30,
+  catMult: { temel: 0.93, atistirmalik: 0.96, icecek: 0.95, sarkuteri: 0.99 },   // rakibin fiyatı = bizim standart fiyat × bu (özel ürünleri satmaz)
+  campaignChance: 0.16,       // günlük kampanya ihtimali (× zorluk rival)
+  campaignMult: 0.85,         // kampanyalı kategoride rakip fiyatı çarpanı
+  campaignShareBonus: 0.04,
+  campaignCats: ["temel", "atistirmalik", "icecek", "sarkuteri"],
+  catNames: { temel: "temel gıda", atistirmalik: "atıştırmalık", icecek: "içecek", sarkuteri: "şarküteri" }
 };
 
 // =====================================================================
 // ÜRÜNLER
 // cat: "temel" | "atistirmalik" | "icecek" | "sarkuteri" | "ozel"
-// Ek (opsiyonel) alanlar: desc (kısa tatlı açıklama)
+// el: fiyat esnekliği (düşük = zorunlu ihtiyaç, zamma dayanır; yüksek = dürtü alışverişi, indirimde çok artar)
+// shelfLife: kaç gece dayanır (1 = ilk gece biter); buzdolabı taze ürünlerin ömrünü uzatır
+// cold: soğuk ürün (buzdolabı şart) · slots: kapladığı raf yuvası · traffic: rafta bulunursa müşteri sayısına katkı (çeşitlilik çeker)
 // =====================================================================
 const PRODUCTS = [
-  { id: "elma",     name: "Elma",           emoji: "🍎", cat: "temel",        cost: 2,  price: 5,  demand: 1.2,  fresh: false, unlockLevel: 1, unlockCost: 0,   desc: "Kıpkırmızı, mis kokulu." },
-  { id: "ekmek",    name: "Ekmek",          emoji: "🥖", cat: "temel",        cost: 3,  price: 6,  demand: 1.4,  fresh: true,  unlockLevel: 1, unlockCost: 0,   desc: "Fırından sıcacık geldi." },
-  { id: "simit",    name: "Simit",          emoji: "🥯", cat: "atistirmalik", cost: 2,  price: 5,  demand: 1.1,  fresh: true,  unlockLevel: 1, unlockCost: 60,  desc: "Susamlı, çıtır çıtır." },
-  { id: "sut",      name: "Süt",            emoji: "🥛", cat: "temel",        cost: 4,  price: 9,  demand: 1.0,  fresh: true,  unlockLevel: 2, unlockCost: 120, desc: "Tam yağlı, cam şişede." },
-  { id: "meyvesuyu",name: "Meyve Suyu",     emoji: "🧃", cat: "icecek",       cost: 5,  price: 11, demand: 0.9,  fresh: false, unlockLevel: 2, unlockCost: 150, desc: "Vişneli, pipetli." },
-  { id: "cikolata", name: "Çikolata",       emoji: "🍫", cat: "atistirmalik", cost: 6,  price: 13, demand: 0.9,  fresh: false, unlockLevel: 3, unlockCost: 220, desc: "Fındıklı, bir kare daha…" },
-  { id: "dondurma", name: "Dondurma",       emoji: "🍦", cat: "atistirmalik", cost: 6,  price: 14, demand: 0.6,  fresh: true,  unlockLevel: 3, unlockCost: 260, desc: "Sıcakta kapış kapış!" },
-  { id: "peynir",   name: "Beyaz Peynir",   emoji: "🧀", cat: "sarkuteri",    cost: 10, price: 21, demand: 0.8,  fresh: true,  unlockLevel: 4, unlockCost: 350, desc: "Kahvaltının yıldızı." },
-  { id: "semsiye",  name: "Şemsiye",        emoji: "☂️", cat: "ozel",         cost: 16, price: 36, demand: 0.15, fresh: false, unlockLevel: 4, unlockCost: 300, desc: "Yağmurda altın değerinde." },
-  { id: "kahve",    name: "Kahve",          emoji: "☕", cat: "icecek",       cost: 9,  price: 20, demand: 0.8,  fresh: false, unlockLevel: 5, unlockCost: 450, desc: "Taze çekilmiş, köpüklü." },
-  { id: "salep",    name: "Sıcak Salep",    emoji: "🍵", cat: "icecek",       cost: 6,  price: 15, demand: 0.35, fresh: false, unlockLevel: 5, unlockCost: 380, desc: "Tarçınlı; soğukta içini ısıtır." },
-  { id: "sucuk",    name: "Sucuk",          emoji: "🌭", cat: "sarkuteri",    cost: 14, price: 29, demand: 0.7,  fresh: false, unlockLevel: 6, unlockCost: 600, desc: "Pazar kahvaltısına şart." },
-  { id: "pasta",    name: "Pasta",          emoji: "🎂", cat: "ozel",         cost: 24, price: 50, demand: 0.45, fresh: true,  unlockLevel: 7, unlockCost: 900, desc: "Çilekli, mumu bizden." },
-  { id: "cicek",    name: "Çiçek Buketi",   emoji: "💐", cat: "ozel",         cost: 22, price: 48, demand: 0.4,  fresh: true,  unlockLevel: 8, unlockCost: 1100,desc: "Mahallenin gönlünü çalar." }
+  { id: "elma",     name: "Elma",           emoji: "🍎", cat: "temel",        cost: 2,  price: 5,  demand: 1.2,  el: 1.5, shelfLife: 5,  slots: 1, traffic: 0,    unlockLevel: 1, unlockCost: 0,    desc: "Kıpkırmızı, mis kokulu." },
+  { id: "ekmek",    name: "Ekmek",          emoji: "🥖", cat: "temel",        cost: 3,  price: 6,  demand: 1.4,  el: 1.25, shelfLife: 2,  slots: 1, traffic: 0,    unlockLevel: 1, unlockCost: 0,    desc: "Fırından sıcacık geldi." },
+  { id: "simit",    name: "Simit",          emoji: "🥯", cat: "atistirmalik", cost: 2,  price: 5,  demand: 1.1,  el: 2.2, shelfLife: 1,  slots: 1, traffic: 0.035, unlockLevel: 1, unlockCost: 60,   desc: "Susamlı, çıtır çıtır. Bir geceyi çıkarmaz!" },
+  { id: "sut",      name: "Süt",            emoji: "🥛", cat: "temel",        cost: 4,  price: 9,  demand: 1.0,  el: 1.2, shelfLife: 2,  slots: 1, cold: true, traffic: 0.04, unlockLevel: 2, unlockCost: 120,  desc: "Tam yağlı, cam şişede." },
+  { id: "meyvesuyu",name: "Meyve Suyu",     emoji: "🧃", cat: "icecek",       cost: 5,  price: 11, demand: 0.9,  el: 2.35, shelfLife: 40, slots: 1, traffic: 0.03, unlockLevel: 2, unlockCost: 150,  desc: "Vişneli, pipetli." },
+  { id: "cikolata", name: "Çikolata",       emoji: "🍫", cat: "atistirmalik", cost: 6,  price: 13, demand: 0.9,  el: 2.25, shelfLife: 60, slots: 1, traffic: 0.04, unlockLevel: 3, unlockCost: 220,  desc: "Fındıklı, bir kare daha…" },
+  { id: "dondurma", name: "Dondurma",       emoji: "🍦", cat: "atistirmalik", cost: 6,  price: 14, demand: 0.6,  el: 2.2, shelfLife: 2,  slots: 1, cold: true, traffic: 0.02, unlockLevel: 3, unlockCost: 260,  desc: "Sıcakta kapış kapış!" },
+  { id: "peynir",   name: "Beyaz Peynir",   emoji: "🧀", cat: "sarkuteri",    cost: 10, price: 21, demand: 0.8,  el: 1.25, shelfLife: 3,  slots: 1, cold: true, traffic: 0.03, unlockLevel: 4, unlockCost: 350,  desc: "Kahvaltının yıldızı." },
+  { id: "semsiye",  name: "Şemsiye",        emoji: "☂️", cat: "ozel",         cost: 16, price: 36, demand: 0.15, el: 1.15, shelfLife: 999,slots: 2, traffic: 0,    unlockLevel: 4, unlockCost: 300,  desc: "Yağmurda altın değerinde. 2 yuva kaplar." },
+  { id: "kahve",    name: "Kahve",          emoji: "☕", cat: "icecek",       cost: 9,  price: 20, demand: 0.8,  el: 1.6, shelfLife: 60, slots: 1, traffic: 0.04, unlockLevel: 5, unlockCost: 450,  desc: "Taze çekilmiş, köpüklü." },
+  { id: "salep",    name: "Sıcak Salep",    emoji: "🍵", cat: "icecek",       cost: 6,  price: 15, demand: 0.35, el: 1.1, shelfLife: 30, slots: 1, traffic: 0.01, unlockLevel: 5, unlockCost: 380,  desc: "Tarçınlı; soğukta içini ısıtır." },
+  { id: "sucuk",    name: "Sucuk",          emoji: "🌭", cat: "sarkuteri",    cost: 14, price: 29, demand: 0.7,  el: 1.7, shelfLife: 25, slots: 1, traffic: 0.03, unlockLevel: 6, unlockCost: 600,  desc: "Pazar kahvaltısına şart." },
+  { id: "pasta",    name: "Pasta",          emoji: "🎂", cat: "ozel",         cost: 24, price: 50, demand: 0.45, el: 1.7, shelfLife: 1,  slots: 2, cold: true, traffic: 0.03, unlockLevel: 7, unlockCost: 900,  desc: "Çilekli, mumu bizden. 2 yuva kaplar, çabuk bayatlar." },
+  { id: "cicek",    name: "Çiçek Buketi",   emoji: "💐", cat: "ozel",         cost: 22, price: 48, demand: 0.4,  el: 1.6, shelfLife: 2,  slots: 2, cold: true, traffic: 0.03, unlockLevel: 8, unlockCost: 1100, desc: "Mahallenin gönlünü çalar. 2 yuva kaplar." }
 ];
 
 // =====================================================================
-// YÜKSELTMELER
-// levels: her eleman o seviyenin KENDİ (artımlı) efekti. Motor alınan tüm seviyeleri toplar:
-//   toplanabilir anahtarlar (customers, shelfCap, bubbleLife, tipChance, autoSolve, satFloor, extraItemChance) → toplanır
-//   çarpan anahtarlar (costMult, bubbleReward, satGain, bubbleWeightMult.x) → çarpılır
-//   fridge / final → true ise true
-// Ek (opsiyonel) alanlar: levels[i].minLevel (o seviye için ek itibar şartı), levels[i].desc (seviye açıklaması),
-//   scene (render için sahnede görünen öğe anahtarı)
+// YÜKSELTMELER — her seviyenin kendi (artımlı) efekti; motor alınan tüm seviyeleri toplar/çarpar.
+//  toplanan: customers, slots, bubbleLife, tipChance, autoSolve, satFloor, extraItemChance, upkeep (günlük gider ₺),
+//            lifeBonus (taze ürün ömrü +gece), rivalGuard, thiefAuto, weatherShield
+//  çarpan:   costMult, bubbleReward, satGain, theftMult, wearMult, regWear, rentMult, bubbleWeightMult.x
+//  mantıksal: fridge, final
+//            comboWindow (kombo penceresi +sn)
+//  Ek: levels[i].minLevel · req: başka yükseltmenin alınmış olması · scene: sahnede görünen öğe
+//  Her yükseltmenin hem faydası hem günlük gideri (upkeep) / riski vardır.
 // =====================================================================
 const UPGRADES = [
   // ---------- DÜKKÂN ----------
   { id: "raf", name: "Ek Raf", emoji: "🧺", cat: "dukkan", unlockLevel: 1, scene: "raf",
-    desc: "Ürün başı raf kapasitesi artar; daha çok stok, daha az 'bitti!'",
+    desc: "Toplam raf yuvası artar: daha çok çeşit/stok, daha az 'bitti!'. Fazla stok bozulur ve nakit bağlar.",
     levels: [
-      { cost: 180,  effect: { shelfCap: 3 }, desc: "+3 kapasite" },
-      { cost: 450, effect: { shelfCap: 4 }, desc: "+4 kapasite", minLevel: 3 },
-      { cost: 900, effect: { shelfCap: 5 }, desc: "+5 kapasite", minLevel: 5 },
-      { cost: 1600, effect: { shelfCap: 6 }, desc: "+6 kapasite", minLevel: 7 }
+      { cost: 180,  effect: { slots: 12 }, desc: "+12 yuva" },
+      { cost: 450,  effect: { slots: 18 }, desc: "+18 yuva", minLevel: 3 },
+      { cost: 900,  effect: { slots: 26 }, desc: "+26 yuva", minLevel: 5 },
+      { cost: 1600, effect: { slots: 36 }, desc: "+36 yuva", minLevel: 7 }
     ] },
   { id: "tabela", name: "Tabela & Reklam", emoji: "📣", cat: "dukkan", unlockLevel: 1, scene: "tabela",
-    desc: "Mahalle seni duysun! Her gün daha çok müşteri.",
+    desc: "Mahalle seni duysun! Her gün daha çok müşteri (rafın yetişmesi lazım).",
     levels: [
       { cost: 150,  effect: { customers: 2 }, desc: "El yazısı tabela: +2 müşteri" },
-      { cost: 400, effect: { customers: 3 }, desc: "Kapıya balon: +3 müşteri", minLevel: 3 },
-      { cost: 850, effect: { customers: 4 }, desc: "Mahalle grubuna ilan: +4 müşteri", minLevel: 5 },
-      { cost: 1500, effect: { customers: 5 }, desc: "Işıklı neon tabela: +5 müşteri", minLevel: 7 }
+      { cost: 400,  effect: { customers: 3 }, desc: "Kapıya balon: +3 müşteri", minLevel: 3 },
+      { cost: 1000, effect: { customers: 3 }, desc: "Mahalle grubuna ilan: +3 müşteri", minLevel: 5 },
+      { cost: 2200, effect: { customers: 4, upkeep: 4 }, desc: "Işıklı neon tabela: +4 müşteri, günlük −₺4 elektrik", minLevel: 7 }
     ] },
   { id: "yazarkasa", name: "Yazar Kasa", emoji: "🧾", cat: "dukkan", unlockLevel: 2, scene: "yazarkasa",
-    desc: "Bozuk para derdi ve kuyruk azalır.",
+    desc: "Kasa daha az bozulur, bozuk para ve kuyruk derdi azalır.",
     levels: [
-      { cost: 300, effect: { bubbleWeightMult: { change: 0.5, queue: 0.8 } }, desc: "Bozuk para baloncuğu yarıya iner" },
-      { cost: 900, effect: { bubbleWeightMult: { change: 0.6, queue: 0.6 }, customers: 1 }, desc: "Temassız ödeme: kuyruk da azalır", minLevel: 5 }
+      { cost: 300, effect: { bubbleWeightMult: { change: 0.5, queue: 0.8 }, regWear: 0.6, extraItemChance: 0.05 }, desc: "Barkod okuyucu: sepete +ürün, bozuk para yarıya iner, kasa %40 az yıpranır" },
+      { cost: 900, effect: { bubbleWeightMult: { change: 0.6, queue: 0.6 }, customers: 1, extraItemChance: 0.03, upkeep: 3 }, desc: "Temassız ödeme: kuyruk azalır, +1 müşteri, sepet büyür · günlük −₺3", minLevel: 5 }
     ] },
   { id: "paspas", name: "Paspas → Robot Süpürge", emoji: "🧹", cat: "dukkan", unlockLevel: 2, scene: "paspas",
-    desc: "Yerler daha az kirlenir, lekeler seni daha az uğraştırır.",
+    desc: "Yerler daha az kirlenir: kaygan zemin tazminatı ve 'leke' baloncukları azalır.",
     levels: [
-      { cost: 220,  effect: { bubbleWeightMult: { clean: 0.7, stain: 0.8 } }, desc: "Kapıya paspas: çamur azalır" },
-      { cost: 800, effect: { bubbleWeightMult: { clean: 0.7, stain: 0.6 }, satFloor: 3 }, desc: "Robot süpürge 'Vınvın' işbaşında", minLevel: 6 }
+      { cost: 180, effect: { bubbleWeightMult: { clean: 0.6, stain: 0.7 } }, desc: "Kapıya paspas: çamur ve leke azalır" },
+      { cost: 700, effect: { bubbleWeightMult: { clean: 0.5, stain: 0.6 }, upkeep: 2 }, desc: "Robot süpürge 'Vınvın' (günlük −₺2 şarj)", minLevel: 6 }
     ] },
   { id: "buzdolabi", name: "Buzdolabı", emoji: "🧊", cat: "dukkan", unlockLevel: 3, scene: "buzdolabi",
-    desc: "Taze ürünler (ekmek, süt, peynir, dondurma, pasta…) gece bozulmaz. Ama kapağı açık kalabilir!",
-    levels: [ { cost: 650, effect: { fridge: true } } ] },
+    desc: "Soğuk ürünler (süt, peynir, dondurma, pasta, çiçek) dolap olmadan %30 az satar; taze ürünlerin ömrü 2,5 kat uzar. Ama elektrik yer, yıpranır, bozulabilir.",
+    levels: [ { cost: 650, effect: { fridge: true, upkeep: 6 }, desc: "Soğuk ürün talebi korunur, taze ömrü ×2,5 · günlük −₺6 elektrik · bakım ister" } ] },
   { id: "toptanci", name: "Toptancı Anlaşması", emoji: "🤝", cat: "dukkan", unlockLevel: 3, scene: null,
-    desc: "Hasan Abi'yle el sıkıştın: alış fiyatları düşer.",
+    desc: "Hasan Abi'yle el sıkıştın: alış fiyatları düşer, ama üyelik aidatı var.",
     levels: [
-      { cost: 500, effect: { costMult: 0.92 }, desc: "Alışta %8 indirim" },
-      { cost: 1400, effect: { costMult: 0.92 }, desc: "Alışta toplam ~%15 indirim", minLevel: 6 }
+      { cost: 500,  effect: { costMult: 0.92, upkeep: 4 }, desc: "Alışta %8 indirim · günlük −₺4 aidat" },
+      { cost: 1400, effect: { costMult: 0.92, upkeep: 4 }, desc: "Alışta toplam ~%15 indirim · günlük −₺8", minLevel: 6 }
     ] },
   { id: "vitrin", name: "Işıklı Vitrin", emoji: "🪟", cat: "dukkan", unlockLevel: 5, scene: "vitrin",
-    desc: "Göz alıcı vitrin: yoldan geçen içeri girer, sepetler dolar.",
+    desc: "Göz alıcı vitrin: yoldan geçen içeri girer, sepetler dolar. Elektrik yer.",
     levels: [
-      { cost: 1000, effect: { customers: 2, extraItemChance: 0.08 }, desc: "+2 müşteri, sepete ekstra ürün" },
-      { cost: 2000, effect: { customers: 3, extraItemChance: 0.07 }, desc: "Mevsimlik vitrin süslemesi", minLevel: 8 }
+      { cost: 1200, effect: { customers: 2, extraItemChance: 0.08, upkeep: 7 }, desc: "+2 müşteri, sepete ekstra ürün · günlük −₺7" },
+      { cost: 2800, effect: { customers: 2, extraItemChance: 0.06, upkeep: 5 }, desc: "Mevsimlik süsleme · günlük −₺12 toplam", minLevel: 8 }
     ] },
+  { id: "guvenlik", name: "Kamera & Alarm", emoji: "📹", cat: "dukkan", unlockLevel: 2, scene: "guvenlik",
+    desc: "Hırsız gelme sıklığı azalır; kaçırılan hırsızı bazen kamera yakalar. Hızlı Geç günlerinde asıl koruma budur.",
+    levels: [
+      { cost: 350, effect: { theftMult: 0.6, thiefAuto: 0.15, upkeep: 3 }, desc: "Kamera: hırsız −%40, kaçanı %15 yakalar · günlük −₺3" },
+      { cost: 900, effect: { theftMult: 0.55, thiefAuto: 0.2, upkeep: 4 }, desc: "Alarm: hırsız toplam −%67, %35 yakalar · günlük −₺7", minLevel: 5 }
+    ] },
+  { id: "sadakat", name: "Sadakat Kartı", emoji: "💳", cat: "dukkan", unlockLevel: 4, scene: null,
+    desc: "Mahalleli kartını cebinden çıkarmadan rakibe gitmez: Zincir Market'in müşteri çekmesi azalır.",
+    levels: [
+      { cost: 450,  effect: { rivalGuard: 0.18, upkeep: 2 }, desc: "Rakibe giden müşteri −%18 · günlük −₺2 basım" },
+      { cost: 1100, effect: { rivalGuard: 0.17, upkeep: 4 }, desc: "Puan toplama: rakip etkisi toplam −%35 · günlük −₺6", minLevel: 7 }
+    ] },
+  { id: "depo", name: "Soğuk Hava Deposu", emoji: "🏭", cat: "dukkan", unlockLevel: 9, scene: null, req: "buzdolabi",
+    desc: "Arkadaki depoyu soğutucuya çevir: devasa raf alanı ve taze ürünlere +1 gece ömür. Pahalı işletilir.",
+    levels: [ { cost: 3200, effect: { slots: 44, lifeBonus: 1, upkeep: 14 }, desc: "+44 yuva, taze ürün +1 gece · günlük −₺14" } ] },
 
   // ---------- PERSONEL ----------
   { id: "cirak", name: "Çırak Ali", emoji: "🧑‍🍳", cat: "personel", unlockLevel: 3, scene: "cirak",
-    desc: "Sen yetişemezsen o yetişir: kaçan baloncukların cezasını bazen önler (ödül vermez).",
+    desc: "Sen yetişemezsen o yetişir: kaçan baloncukların cezasını bazen önler, ekipman bakımını yapar. Maaşı var!",
     levels: [
-      { cost: 600, effect: { autoSolve: 0.12 }, desc: "%12 ihtimalle cezayı önler" },
-      { cost: 1300, effect: { autoSolve: 0.12 }, desc: "%24", minLevel: 6 },
-      { cost: 2400, effect: { autoSolve: 0.11 }, desc: "%35 (en fazla)", minLevel: 8 }
+      { cost: 500,  effect: { autoSolve: 0.15, wearMult: 0.8, upkeep: 7 }, desc: "%15 ihtimalle cezayı önler, aşınma −%20 · maaş −₺7/gün" },
+      { cost: 1100, effect: { autoSolve: 0.15, wearMult: 0.8, upkeep: 6 }, desc: "%30 · aşınma −%36 · maaş toplam −₺13/gün", minLevel: 6 },
+      { cost: 2000, effect: { autoSolve: 0.15, wearMult: 0.8, upkeep: 6 }, desc: "%45 · aşınma −%49 · maaş toplam −₺19/gün", minLevel: 8 }
     ] },
   { id: "onluk", name: "Tezgâhtar Önlüğü", emoji: "🎽", cat: "personel", unlockLevel: 2, scene: "onluk",
-    desc: "Rozetli önlük giyince eller daha çevik: baloncuk ödülleri artar.",
+    desc: "Rozetli önlük giyince eller daha çevik: baloncuk ve hırsız yakalama ödülleri artar. Yalnız oynayanlara yarar.",
     levels: [
-      { cost: 250,  effect: { bubbleReward: 1.15 }, desc: "Baloncuk ödülü +%15" },
-      { cost: 900, effect: { bubbleReward: 1.15 }, desc: "Toplam +%32", minLevel: 5 },
-      { cost: 1900, effect: { bubbleReward: 1.15 }, desc: "Toplam +%52", minLevel: 8 }
+      { cost: 300,  effect: { bubbleReward: 1.15 }, desc: "Baloncuk ödülü +%15" },
+      { cost: 1000, effect: { bubbleReward: 1.15 }, desc: "Toplam +%32", minLevel: 5 },
+      { cost: 2000, effect: { bubbleReward: 1.15 }, desc: "Toplam +%52", minLevel: 8 }
     ] },
 
   // ---------- DEKOR ----------
   { id: "kediyatagi", name: "Pamuk'un Yatağı", emoji: "🛏️", cat: "dekor", unlockLevel: 1, scene: "kediyatagi",
-    desc: "Pamuk mutlu, dükkân huzurlu. Kutu devirme azalır, müşteriler gülümser.",
-    levels: [ { cost: 120, effect: { satFloor: 5, bubbleWeightMult: { catbox: 0.6, pet: 1.3 } } } ] },
+    desc: "Pamuk iyi uyuyunca nöbette gözü açık olur: hırsız azalır, kutu devirme azalır, Pamuk daha çok mırıldanır.",
+    levels: [ { cost: 120, effect: { theftMult: 0.85, satFloor: 3, bubbleWeightMult: { catbox: 0.6, pet: 1.3 } }, desc: "Hırsız −%15, kutu devirme azalır" } ] },
   { id: "bitkiler", name: "Saksı Bitkileri", emoji: "🪴", cat: "dekor", unlockLevel: 2, scene: "bitkiler",
-    desc: "Yeşillik iyi gelir: memnuniyet daha hızlı artar.",
+    desc: "Çiçekli giriş mahalleliyi mutlu eder: memnuniyet kolay artar, rakibe giden müşteri azalır. Sulamak masraf.",
     levels: [
-      { cost: 200,  effect: { satGain: 1.15, satFloor: 3 }, desc: "Pencere önüne fesleğen" },
-      { cost: 650, effect: { satGain: 1.1,  satFloor: 4 }, desc: "Köşeye kocaman monstera", minLevel: 5 }
+      { cost: 200, effect: { satGain: 1.15, satFloor: 3, rivalGuard: 0.05, upkeep: 1 }, desc: "Fesleğen: rakip etkisi −%5 · günlük −₺1" },
+      { cost: 650, effect: { satGain: 1.1, satFloor: 4, rivalGuard: 0.05, upkeep: 1 }, desc: "Monstera: rakip −%10 toplam · günlük −₺2", minLevel: 5 }
     ] },
   { id: "lamba", name: "Sarı Işıklı Lamba", emoji: "💡", cat: "dekor", unlockLevel: 3, scene: "lamba",
-    desc: "Sıcacık ışık: müşteriler oyalanır, bahşiş bırakır.",
-    levels: [ { cost: 400, effect: { tipChance: 0.05, customers: 1, bubbleWeightMult: { fog: 0.7 } } } ] },
+    desc: "Sıcacık ışık: müşteriler oyalanır, bahşiş bırakır, cam buğulanmaz. Elektrik yer.",
+    levels: [ { cost: 400, effect: { tipChance: 0.05, customers: 1, upkeep: 3, bubbleWeightMult: { fog: 0.7 } }, desc: "+1 müşteri, bahşiş şansı · günlük −₺3" } ] },
   { id: "muzik", name: "Müzik Kutusu", emoji: "🎵", cat: "dekor", unlockLevel: 4, scene: "muzik",
-    desc: "Hafif bir melodi: baloncuklar biraz daha sabırlı, müşteriler daha keyifli.",
+    desc: "Hafif bir melodi: baloncuklar daha sabırlı, art arda dokunmak kolaylaşır (kombo). Salvoda yetişemeyenlerin kurtarıcısı.",
     levels: [
-      { cost: 450, effect: { bubbleLife: 0.5, satGain: 1.05 }, desc: "Baloncuk ömrü +0.5 sn" },
-      { cost: 1100, effect: { bubbleLife: 0.5, satGain: 1.05 }, desc: "Pikap! Toplam +1 sn", minLevel: 7 }
+      { cost: 450,  effect: { bubbleLife: 0.5, comboWindow: 0.6, satGain: 1.05, upkeep: 2 }, desc: "Baloncuk ömrü +0,5 sn, kombo penceresi +0,6 sn · günlük −₺2" },
+      { cost: 1100, effect: { bubbleLife: 0.5, comboWindow: 0.6, satGain: 1.05, upkeep: 1 }, desc: "Pikap! Toplam +1 sn ömür, +1,2 sn kombo · günlük −₺3", minLevel: 7 }
     ] },
   { id: "tente", name: "Yeni Tente", emoji: "⛱️", cat: "dekor", unlockLevel: 4, scene: "tente",
-    desc: "Kırmızı-krem çizgili yepyeni tente: yağmurda da güneşte de gelen olur.",
-    levels: [ { cost: 700, effect: { customers: 2, satFloor: 3, bubbleWeightMult: { leak: 0.4 } } } ] },
+    desc: "Kırmızı-krem tente: yağmurda ve karda müşteri kaybı yarıya iner, tavan damlatmaz.",
+    levels: [ { cost: 700, effect: { customers: 2, weatherShield: 0.5, bubbleWeightMult: { leak: 0.4 } }, desc: "+2 müşteri, kötü havada müşteri kaybı yarıya" } ] },
 
   // ---------- FİNAL ----------
   { id: "buyukacilis", name: "Büyük Açılış — Dükkânı Genişlet", emoji: "🎉", cat: "final", unlockLevel: 10, scene: "buyukacilis",
-    desc: "Yan dükkânı da kirala, duvarı yık, kurdeleyi kes! Köşe Market mahallenin yıldızı olur.",
-    levels: [ { cost: 6500, effect: { final: true, shelfCap: 10, customers: 10 } } ] }
+    desc: "Yan dükkânı da kirala, duvarı yık, kurdeleyi kes! Köşe Market mahallenin yıldızı olur. Kira ve giderler büyür.",
+    levels: [ { cost: 5000, effect: { final: true, slots: 40, customers: 10, rentMult: 1.3, upkeep: 12 }, desc: "+40 yuva, +10 müşteri · kira ×1,3 · günlük −₺12" } ] }
 ];
 
 // =====================================================================
 // BALONCUK TÜRLERİ
 // zone: "shelf" | "floor" | "register" | "door" | "fridge" | "window" | "cat"
-// Ek (opsiyonel) alanlar:
-//   labelTpl: "{name}" → ürün adıyla doldurulur (dinamik restock)
-//   bonus: true → pozitif baloncuk, kaçırılınca ceza yok ve kombo sıfırlanmaz
-//   satGain: +N memnuniyet (basınca), rep: +N XP (basınca)
-//   requires: "fridge" → sadece o efekt varsa doğar
-//   minDay: bu günden önce doğmaz
-//   productLinked: true → rastgele açık bir ürüne bağlanır (lostSalesSec o ürünü durdurur)
+// penalty alanları: sat, money (₺, seviye×zorlukla büyür), lostCustomers, lostSalesSec, steal (adet), breakEquip, spoil (taze stoğun oranı)
+// Ek: labelTpl, bonus (ceza yok), satGain, rep, requires, minDay, productLinked, dynamic (olayla doğar), special: thief|break|crisis
 // =====================================================================
 const BUBBLE_TYPES = {
   restock:  { emoji: "📦", label: "Raf boşaldı!", labelTpl: "{name} bitti!", zone: "shelf", taps: 1, life: 5, reward: 2,
-              penalty: { lostSalesSec: 60 }, dynamic: true, productLinked: true },
+              penalty: { lostSalesSec: 60, money: -3, sat: -2 }, dynamic: true, productLinked: true },
   clean:    { emoji: "🧽", label: "Yer kirlendi", zone: "floor", taps: 2, life: 5, reward: 2,
-              penalty: { sat: -4 }, weight: 3 },
+              penalty: { sat: -4, money: -4 }, weight: 3 },
   stain:    { emoji: "🟤", label: "İnatçı leke!", zone: "floor", taps: 3, life: 6, reward: 5,
-              penalty: { sat: -5 }, weight: 1, minDay: 3 },
+              penalty: { sat: -5, money: -6 }, weight: 1, minDay: 3 },
   change:   { emoji: "🪙", label: "Bozuk para lazım", zone: "register", taps: 1, life: 3.5, reward: 3,
-              penalty: { sat: -2 }, weight: 3 },
+              penalty: { sat: -2, lostCustomers: 1 }, weight: 3 },
   queue:    { emoji: "🧍", label: "Kuyruk uzadı", zone: "register", taps: 2, life: 4.5, reward: 3,
-              penalty: { lostCustomers: 1, sat: -2 }, weight: 2, minDay: 2 },
+              penalty: { lostCustomers: 1, sat: -3 }, weight: 2, minDay: 2 },
   catbox:   { emoji: "🙀", label: "Pamuk kutuyu devirdi", zone: "cat", taps: 2, life: 5, reward: 3,
-              penalty: { money: -3, sat: -2 }, weight: 1.5 },
+              penalty: { money: -5, sat: -2 }, weight: 1.5 },
   courier:  { emoji: "🛵", label: "Kapıda kurye", zone: "door", taps: 1, life: 4, reward: 4,
-              penalty: { money: -4 }, weight: 1.5, minDay: 2 },
+              penalty: { money: -6 }, weight: 1.5, minDay: 2 },
   fridgeDoor:{ emoji: "🚪", label: "Dolap kapağı açık!", zone: "fridge", taps: 1, life: 4, reward: 3,
-              penalty: { money: -4, sat: -1 }, weight: 1.5, requires: "fridge" },
+              penalty: { money: -4, sat: -1, spoil: 0.1 }, weight: 1.5, requires: "fridge" },
   fog:      { emoji: "🌫️", label: "Cam buğulandı", zone: "window", taps: 2, life: 5.5, reward: 2,
-              penalty: { sat: -2 }, weight: 1 },
+              penalty: { sat: -3, money: -2 }, weight: 1 },
   priceTag: { emoji: "🏷️", label: "Etiket düştü", zone: "shelf", taps: 1, life: 4.5, reward: 2,
-              penalty: { lostSalesSec: 12 }, weight: 2, productLinked: true },
+              penalty: { lostSalesSec: 25, money: -3 }, weight: 2, productLinked: true },
   kid:      { emoji: "🍭", label: "Çocuk ağlıyor", zone: "floor", taps: 1, life: 4, reward: 3,
-              penalty: { sat: -5 }, weight: 1.2, minDay: 2 },
+              penalty: { sat: -6, money: -3 }, weight: 1.2, minDay: 2 },
   phone:    { emoji: "☎️", label: "Telefonla sipariş!", zone: "register", taps: 1, life: 3.5, reward: 6,
-              penalty: { lostCustomers: 1 }, weight: 1, minDay: 4 },
+              penalty: { lostCustomers: 1, money: -4 }, weight: 1, minDay: 4 },
   leak:     { emoji: "💧", label: "Tavan damlıyor", zone: "floor", taps: 2, life: 5, reward: 3,
-              penalty: { sat: -3, money: -2 }, weight: 0.2 },
+              penalty: { sat: -4, money: -8 }, weight: 0.2 },
   neighbor: { emoji: "👋", label: "Komşu selam veriyor", zone: "window", taps: 1, life: 4, reward: 2,
               penalty: {}, weight: 1, bonus: true, satGain: 2 },
   pet:      { emoji: "🐈", label: "Pamuk'u sev", zone: "cat", taps: 1, life: 4.5, reward: 1,
@@ -253,9 +419,80 @@ const BUBBLE_TYPES = {
   golden:   { emoji: "⭐", label: "Altın fırsat!", zone: "window", taps: 1, life: 2.2, reward: 15,
               penalty: {}, weight: 0.25, bonus: true, rep: 2 },
   regular:  { emoji: "🙋", label: "Mahalleli uğradı", zone: "door", taps: 1, life: 6, reward: 5,
-              penalty: { sat: -3 }, dynamic: true }
-  // regular: emoji/label çalışma anında sakinin emoji + line'ı ile değiştirilir; reward yerine BALANCE.regularTip kullanılabilir
+              penalty: { sat: -3 }, dynamic: true },
+  // --- yeni mekanik baloncukları (olayla doğarlar) ---
+  thief:    { emoji: "🕵️", label: "Şüpheli müşteri!", zone: "shelf", taps: 1, life: 3.2, reward: 8,
+              penalty: { steal: 1 }, dynamic: true, special: "thief", rep: 1.5 },
+  breakFridge:{ emoji: "🧊", label: "Dolap arızalandı!", zone: "fridge", taps: 2, life: 5, reward: 0,
+              penalty: { breakEquip: "fridge" }, dynamic: true, special: "break", equip: "fridge" },
+  breakReg: { emoji: "🧾", label: "Kasa dondu!", zone: "register", taps: 2, life: 5, reward: 0,
+              penalty: { breakEquip: "register" }, dynamic: true, special: "break", equip: "register" },
+  crisis:   { emoji: "❓", label: "Karar ver!", zone: "door", taps: 1, life: 6.5, reward: 0,
+              penalty: {}, dynamic: true, special: "crisis" }
 };
+
+// =====================================================================
+// KRİZ KARTLARI — baloncuğa basınca açılır; 9 sn içinde seç. Seçmezsen/baloncuk kaçarsa "ignore" olur.
+// options[].cost: peşin ₺ (seviyeyle büyür) · outcomes: [{p, text, fx}] (tohumlu, deterministik)
+// fx: money, sat, rep, customers (±), stockBuy {n, discount}, spoilFresh (oran), breakEquip, fixEquip, sellPremium (çarpan)
+// =====================================================================
+const CRISES = [
+  { id: "kamyon", emoji: "🚚", title: "Toptancı kamyonu geçiyor!", text: "Hasan Abi'nin kamyonu kapıda: bugüne özel %30 indirimli koli. Rafta yer ve kasada para var mı?",
+    weight: 3, minDay: 3,
+    options: [ { id: "al", label: "Koli al", hint: "14 ürün %30 ucuz (yuva/para yettiği kadar)", outcomes: [{ p: 1, text: "Koliler rafa girdi!", fx: { stockBuy: { n: 14, discount: 0.3 } } }] } ],
+    ignore: { text: "Kamyon geçti gitti.", outcomes: [{ p: 1, text: "Fırsat kaçtı.", fx: {} }] } },
+  { id: "elektrik", emoji: "⚡", title: "Elektrik kesildi!", text: "Dolap ısınıyor, kasa durdu, müşteriler karanlıkta. Ne yapacaksın?",
+    weight: 2, minDay: 6,
+    options: [
+      { id: "jenerator", label: "Jeneratör kirala", cost: 30, hint: "−₺30, hiçbir şey kaybetmezsin", outcomes: [{ p: 1, text: "Dükkân ışıl ışıl, kimse fark etmedi.", fx: {} }] },
+      { id: "mum", label: "Mum yak", cost: 5, hint: "−₺5; taze ürün biraz bozulur, müşteri hoşnutsuz", outcomes: [{ p: 1, text: "Romantik ama pek kârlı değil.", fx: { sat: -3, spoilFresh: 0.12 } }] }
+    ],
+    ignore: { text: "Müşteri kaybı, bozulan taze ürün, memnuniyet düşüşü.", outcomes: [{ p: 1, text: "Karanlıkta herkes kaçtı.", fx: { customers: -4, sat: -4, spoilFresh: 0.2 } }] } },
+  { id: "kalabalik", emoji: "👥", title: "Kalabalık bastı!", text: "Otobüs yolcuları aynı anda daldı. Kasada kuyruk büyüyor!",
+    weight: 2.5, minDay: 5,
+    options: [ { id: "kasa", label: "İkinci kasa aç", cost: 15, hint: "−₺15, +5 müşteri alışveriş yapar", outcomes: [{ p: 1, text: "Hepsi memnun ayrıldı!", fx: { customers: 5 } }] } ],
+    ignore: { text: "3 müşteri beklemeyip gider, memnuniyet düşer.", outcomes: [{ p: 1, text: "Kuyruk dayanılmaz oldu.", fx: { customers: -3, sat: -2 } }] } },
+  { id: "pazarlik", emoji: "🎲", title: "Gezgin satıcı: Altın fırsat!", text: "'Bugün şanslı gününüz, abla/abi!' diyor. Peşin ver, belki iki katını kazanırsın… belki de hiç.",
+    weight: 1.5, minDay: 5,
+    options: [ { id: "risk", label: "Risk al", cost: 25, hint: "−₺25; %45 ihtimalle +₺75", outcomes: [
+      { p: 0.45, text: "Tuttu! Satıcı doğru söylemiş.", fx: { money: 75 } }, { p: 0.55, text: "Pişman oldun…", fx: {} } ] } ],
+    ignore: { text: "Satıcıyı geçtin.", outcomes: [{ p: 1, text: "Ne olduğunu hiç öğrenemeyeceksin.", fx: {} }] } },
+  { id: "denetci", emoji: "🕵️", title: "Belediye denetimi!", text: "Hikmet Bey habersiz geldi. Etiketler, tarihler, temizlik… hepsine bakacak.",
+    weight: 2, minDay: 8,
+    options: [ { id: "duzelt", label: "Hemen düzelt", cost: 20, hint: "−₺20 ama ceza riski yok", outcomes: [{ p: 1, text: "Hikmet Bey tam puan verdi.", fx: { sat: 1 } }] } ],
+    ignore: { text: "%50 ihtimalle ağır ceza (−₺45) ve memnuniyet kaybı.", outcomes: [
+      { p: 0.5, text: "Ceza yedin!", fx: { money: -45, sat: -5 } }, { p: 0.5, text: "Neyse ki bu sefer bakmadı.", fx: {} } ] } },
+  { id: "rakipanons", emoji: "📣", title: "Zincir Market anons yapıyor!", text: "Karşı köşeden hoparlörle 'Hepsi yarı fiyatına!' diye bağırıyorlar. Mahalle kulak kabarttı.",
+    weight: 3, minDay: 12, requires: "rival",
+    options: [ { id: "tabela", label: "'Bugüne özel' tabelası as", cost: 12, hint: "−₺12, +4 müşteri kazanırsın", outcomes: [{ p: 1, text: "Tabela tuttu, mahalle sende kaldı.", fx: { customers: 4 } }] } ],
+    ignore: { text: "5 müşteri rakibe gider.", outcomes: [{ p: 1, text: "Müşteriler karşıya akın etti.", fx: { customers: -5, sat: -1 } }] } },
+  { id: "siparis", emoji: "📦", title: "Yanlış sipariş geldi!", text: "Kurye başka dükkânın kolisini bırakmış, müşteri de kızgın.",
+    weight: 1.5, minDay: 6,
+    options: [ { id: "duzelt", label: "Hemen düzelt", cost: 12, hint: "−₺12; müşteri memnun", outcomes: [{ p: 1, text: "Özür dilediler, herkes güldü.", fx: { sat: 1 } }] } ],
+    ignore: { text: "−₺20 zarar, memnuniyet düşer.", outcomes: [{ p: 1, text: "Koli geri gitti, müşteri trip attı.", fx: { money: -20, sat: -2 } }] } },
+  { id: "sizinti", emoji: "💧", title: "Dolap su sızdırıyor!", text: "Buzdolabının altında göl oluştu, motor garip ses çıkarıyor.",
+    weight: 2, minDay: 8, requires: "fridge",
+    options: [
+      { id: "tamirci", label: "Tamirci çağır", cost: 30, hint: "−₺30; dolap sapasağlam olur", outcomes: [{ p: 1, text: "Usta dolabı yenisi gibi yaptı.", fx: { fixEquip: "fridge" } }] },
+      { id: "bez", label: "Bez koy", hint: "Bedava ama %40 ihtimalle dolap bozulur", outcomes: [
+        { p: 0.4, text: "Dolap bozuldu!", fx: { breakEquip: "fridge" } }, { p: 0.6, text: "Şimdilik idare etti.", fx: {} } ] }
+    ],
+    ignore: { text: "%70 ihtimalle dolap bozulur.", outcomes: [
+      { p: 0.7, text: "Dolap bozuldu!", fx: { breakEquip: "fridge" } }, { p: 0.3, text: "Şansın yaver gitti.", fx: {} } ] } },
+  { id: "veresiye", emoji: "🤝", title: "Komşu veresiye istiyor", text: "Bakkal Hüsnü Amca: 'Evladım ay sonuna kadar yaz, söz veriyorum.'",
+    weight: 1.5, minDay: 6,
+    options: [ { id: "ver", label: "Ver", cost: 20, hint: "−₺20; %70 ihtimalle ₺32 geri döner", outcomes: [
+      { p: 0.7, text: "Borcunu faiziyle ödedi, bahşiş de bıraktı!", fx: { money: 32, sat: 2 } }, { p: 0.3, text: "Bir daha uğramadı…", fx: {} } ] } ],
+    ignore: { text: "Hayır dedin; kırgın gitti.", outcomes: [{ p: 1, text: "Biraz surat astı.", fx: { sat: -1 } }] } },
+  { id: "vip", emoji: "🧐", title: "Mahalleye VIP müşteri geldi", text: "Şık takım elbiseli bir bey: 'Elinizdeki en iyi ürünü alırım.'",
+    weight: 1, minDay: 10, minLevel: 5,
+    options: [ { id: "ozel", label: "Özel ürünü ayır", hint: "En pahalı ürünü 2,2 katına satarsın (stokta varsa)", outcomes: [{ p: 1, text: "Kasa bir güzel çınladı!", fx: { sellPremium: 2.2 } }] } ],
+    ignore: { text: "Bey başka dükkâna yöneldi.", outcomes: [{ p: 1, text: "Fırsat kaçtı.", fx: {} }] } },
+  { id: "baskin", emoji: "💦", title: "Su baskını!", text: "Üst kattaki daire musluğu açık unutmuş; tavandan şelale akıyor.",
+    weight: 1, minDay: 10,
+    options: [ { id: "vana", label: "Vanayı kapat + sil", cost: 25, hint: "−₺25; büyük zarar önlenir", outcomes: [{ p: 1, text: "Sadece birkaç koli ıslandı.", fx: { sat: -1 } }] } ],
+    ignore: { text: "−₺40, memnuniyet −5, 3 müşteri kaçar.", outcomes: [{ p: 1, text: "Dükkân göle döndü!", fx: { money: -40, sat: -5, customers: -3 } }] } }
+];
 
 // =====================================================================
 // HAFTANIN GÜNLERİ (gün 1 = Pazartesi)
@@ -377,7 +614,7 @@ const DAY_EVENTS = [
     customerMult: 1.1, bubbleMult: 1.15, demandMods: { sut: 1.5 }, bubbleMods: { pet: 5.0, catbox: 2.0 },
     goal: { type: "pop", bubble: "pet", count: 3, value: 3, reward: { money: 40, rep: 12 }, text: "Kedileri 3 kez sev" } },
   { id: "toptanciindirim", name: "Toptancı İndirimi", emoji: "🏷️", minDay: 4, weight: 2.5,
-    desc: "Hasan Abi depoyu boşaltıyor: bugün tüm alışlar %20 ucuz! Stok yapma zamanı.",
+    desc: "Hasan Abi depoyu boşaltıyor: bugün tüm alışlar %20 ucuz! Stok yapma zamanı (raf ömrüne dikkat).",
     customerMult: 1.0, bubbleMult: 0.9, costMult: 0.8, demandMods: {}, bubbleMods: { courier: 3.5 },
     goal: { type: "pop", bubble: "courier", count: 2, value: 2, reward: { money: 30, rep: 8 }, text: "2 kurye teslimatını karşıla" } },
   { id: "zam", name: "Zam Haberi", emoji: "📈", minDay: 11, weight: 1.5,
@@ -473,15 +710,46 @@ const REGULARS = [
 // =====================================================================
 const LEVELS = [
   { level: 1,  rep: 0,    title: "Köşedeki Dükkân",       unlockText: "" },
-  { level: 2,  rep: 60,   title: "Tanıdık Yüz",           unlockText: "Süt ve meyve suyu satılabilir; yazar kasa, önlük ve bitkiler açıldı." },
+  { level: 2,  rep: 60,   title: "Tanıdık Yüz",           unlockText: "Süt ve meyve suyu satılabilir; yazar kasa, önlük, bitkiler ve Kamera & Alarm açıldı." },
   { level: 3,  rep: 170,  title: "Mahallenin Bakkalı",    unlockText: "Çikolata ve dondurma! Buzdolabı, toptancı ve çırak Ali seni bekliyor." },
-  { level: 4,  rep: 350,  title: "Güler Yüzlü Esnaf",     unlockText: "Peynir ve şemsiye açıldı. Müzik kutusu ve yeni tente de geldi." },
+  { level: 4,  rep: 350,  title: "Güler Yüzlü Esnaf",     unlockText: "Peynir ve şemsiye açıldı. Müzik kutusu, yeni tente ve Sadakat Kartı da geldi." },
   { level: 5,  rep: 600,  title: "Sokağın Sevgilisi",     unlockText: "Kahve ve sıcak salep! Işıklı vitrin artık alınabilir." },
   { level: 6,  rep: 900,  title: "Güvenilir Market",      unlockText: "Sucuk rafı açıldı. Toptancıyla ikinci anlaşma, robot süpürge!" },
   { level: 7,  rep: 1300, title: "Semtin Gözdesi",        unlockText: "Pasta satabilirsin! Neon tabela ve pikap müzik kutusu açıldı." },
   { level: 8,  rep: 1800, title: "Mahallenin Kalbi",      unlockText: "Çiçek buketleri! Çırak Ali ustalaşabilir, vitrin süslenebilir." },
-  { level: 9,  rep: 2450, title: "Efsane Esnaf",          unlockText: "Herkes seni konuşuyor. Büyük hedef çok yakın…" },
+  { level: 9,  rep: 2450, title: "Efsane Esnaf",          unlockText: "Herkes seni konuşuyor. Soğuk Hava Deposu açıldı; büyük hedef çok yakın…" },
   { level: 10, rep: 3300, title: "Mahallenin Yıldızı",    unlockText: "Büyük Açılış — Dükkânı Genişlet artık alınabilir! 🎉" }
+];
+
+// =====================================================================
+// ÖĞRETİCİ SATIRLAR — yeni bir mekanik ilk göründüğünde sabah ekranında tek tek çıkar (kapatılabilir)
+// when: day (minDay'den itibaren) | rivalSoon (rakip açılışına ≤2 gün) | rentSoon (ilk kira ≤3 gün) | debt | fridge | salvo
+// =====================================================================
+const HINTS = [
+  { id: "slots", when: "day", minDay: 1, emoji: "🧺", title: "Raf yuvası sınırlı",
+    text: "Dükkânın toplam raf yuvası var (rafın altındaki çubuk). Pasta, çiçek ve şemsiye 2 yuva kaplar. Yer bitince stok alamazsın: neyi satacağını seç." },
+  { id: "shelf", when: "day", minDay: 2, emoji: "⏳", title: "Taze ürün bozulur",
+    text: "Simit ve pasta bir geceyi, ekmek ve süt iki geceyi çıkarmaz. Kartlardaki '⏳ yarın bozulur' uyarısına bak; fazla alırsan paran çöpe gider. Buzdolabı ömrü uzatır." },
+  { id: "prices", when: "day", minDay: 3, emoji: "💲", title: "Fiyatı sen belirle",
+    text: "Her ürünün altındaki Ucuz / Normal / Pahalı düğmeleri satış fiyatını değiştirir. 🔥 aranan ve zorunlu ürünlerde zam çoğu zaman kazandırır; dürtü ürünlerinde (çikolata, dondurma) indirim müşteri çeker." },
+  { id: "bills", when: "day", minDay: 4, emoji: "🔌", title: "Sabit giderler",
+    text: "Her akşam elektrik/maaş giderin düşer, her Pazar akşamı kira ödenir. Kasa yetmezse Hasan Abi'den faizli borç alırsın; borç limiti aşılırsa iflas edersin!" },
+  { id: "crisis", when: "day", minDay: 5, emoji: "❓", title: "Karar anları",
+    text: "Soru işaretli baloncuğa dokunursan 9 saniyelik bir karar kartı açılır. Seçmezsen ya da baloncuk kaçarsa en kötü seçenek ('görmezden gel') gerçekleşir." },
+  { id: "thief", when: "day", minDay: 6, emoji: "🕵️", title: "Hırsız var!",
+    text: "Şüpheli müşteri baloncuğuna zamanında bas; yoksa en pahalı raftan ürün çalar. 'Hızlı Geç' günlerinde dükkân başıboş kalır ve hırsız iki kat gelir. Kamera & Alarm gelen hırsızı azaltır." },
+  { id: "equip", when: "day", minDay: 7, emoji: "🔧", title: "Dolap ve kasa yıpranır",
+    text: "Her gün biraz yıpranırlar; durum çubuğu azalınca arıza riski artar. Sabah 'Bakım yaptır' ucuzdur, arıza sonrası tamir pahalıdır. Bozuk kasa müşteri kaçırır, bozuk dolap taze ürünü çürütür." },
+  { id: "salvo", when: "salvo", minDay: 8, emoji: "⚡", title: "Yoğun saatler",
+    text: "Zaman zaman baloncuklar art arda gelir. Önce halkası kırmızıya dönen en kısa ömürlüyü çöz; hepsine yetişemezsen en pahalı cezası olanı seç." },
+  { id: "rival", when: "rivalSoon", minDay: 1, emoji: "🏬", title: "Zincir Market geliyor!",
+    text: "Köşeye Zincir Market açılacak: fiyatları senden ucuz, müşterinin bir kısmını çeker ve zaman zaman kampanya yapar. Kartlarda rakibin fiyatı görünür; pahalı kalırsan müşteri onlara gider. Memnun müşteri ve Sadakat Kartı seni korur." },
+  { id: "rent", when: "rentSoon", minDay: 1, emoji: "🧾", title: "İlk kira geliyor",
+    text: "Pazar akşamı haftalık kira düşer; seviyen yükseldikçe artar. Kasada bu kadar para bırak, yoksa borca girersin." },
+  { id: "debt", when: "debt", minDay: 1, emoji: "⚠️", title: "Borcun var",
+    text: "Her gün faiz işler; pozitif günlük kârının %40'ı otomatik borca gider. Sabah elindeki parayla 'Borcu öde' diyebilirsin. Limiti aşarsan ya da 14 gün kesintisiz borçlu kalırsan iflas!" },
+  { id: "fridge", when: "fridge", minDay: 1, emoji: "🧊", title: "Buzdolabı masraflıdır",
+    text: "Dolap taze ürünlerin ömrünü uzatır ama elektrik yer ve yıpranır. Çok taze ürün satmıyorsan bakım masrafı kazancını yiyebilir." }
 ];
 
 // =====================================================================
@@ -490,11 +758,11 @@ const LEVELS = [
 const STORY = {
   intro: [
     "🐈 Miyav! Ben Pamuk. Bu köşedeki minik dükkân artık senin!",
-    "Rafları doldur, kepenkleri aç, mahalleli akın akın gelsin.",
-    "Dükkânda bir şeyler ters gidince üstünde baloncuk belirir. Hemen dokun!",
+    "Rafları doldur, fiyatları ayarla, kepenkleri aç. Ama dikkat: kira, fatura ve borç gerçek!",
+    "Dükkânda bir şeyler ters gidince üstünde baloncuk belirir. Hemen dokun, yoksa zarar edersin.",
+    "Hırsız, arıza, kriz kartları, rakip market… Tetikte ol. Günü hızlı geçersen dükkân başıboş kalır!",
     "Hızlı hızlı dokunursan kombo yaparsın. Kombo = daha çok ₺ 💰",
-    "İstersen günü hızlı da geçebilirsin, ama baloncuklar kendi kendine çözülmez…",
-    "Hedefimiz? Mahallenin Yıldızı olmak ve dükkânı büyütmek! Hadi başlayalım 🎀"
+    "Hedefimiz? Mahallenin Yıldızı olmak ve batmadan dükkânı büyütmek! Hadi başlayalım 🎀"
   ],
   levelUp: {
     2:  "Mahalleli seni tanımaya başladı! Ayşe Teyze herkese anlatıyor 👵",
@@ -504,7 +772,7 @@ const STORY = {
     6:  "Güvenilir market rozeti! Hasan Abi sana özel fiyat veriyor 🤝",
     7:  "Semtin gözdesisin. Karşı sokaktan bile müşteri geliyor!",
     8:  "Mahallenin kalbi burada atıyor 💗 Pamuk'un bile hayran kulübü var.",
-    9:  "Efsane esnaf! Belediye başkanı bile uğrayıp simit aldı.",
+    9:  "Efsane esnaf! Belediye başkanı bile uğrayıp simit aldı. Arka depo soğutucuya çevrilebilir.",
     10: "⭐ MAHALLENİN YILDIZI! Artık Büyük Açılış için her şey hazır…"
   },
   finale: [
@@ -513,27 +781,41 @@ const STORY = {
     "Kerem'in buketi işe yaramış: nişan pastası bizden!",
     "Pamuk yeni vitrinin tam ortasına kıvrıldı. Burası onun krallığı.",
     "Sen de artık resmen… Mahallenin Yıldızı'sın ⭐",
-    "Teşekkürler! Dükkân açık kalmaya devam ediyor — istediğin kadar oynayabilirsin."
+    "Dükkân açık kalıyor: büyük dükkânın kirası da büyük. Sezon hedeflerini tutturup efsane olabilir misin?"
+  ],
+  // Erken günler için sırayla gösterilen ipuçları; sonrası `tips` içinden döner
+  earlyTips: [
+    "Raf yuvaların sınırlı: hangi ürünü kaç tane alacağını sen seç. Dengeli Doldur iyi bir başlangıçtır.",
+    "Baloncuklara art arda hızlı dokun: kombo x2.0'a kadar çıkar!",
+    "Taze ürün (simit, ekmek, pasta…) geceyi çıkarmayabilir. Kartlardaki '⏳ yarın bozulur' uyarısına bak.",
+    "Hızlı Geç günleri dükkân başıboş kalır: baloncuklar kaçar, hırsız iki kat gelir.",
+    "🕵️ Şüpheli müşteri baloncuğuna basmazsan raftan ürün çalar.",
+    "Pazar akşamı kira düşer. Kasada para bırak, yoksa faizli borca girersin.",
+    "❓ Soru işaretli baloncuk bir karar kartı açar; 9 saniyen var.",
+    "Her ürünün altındaki Ucuz/Normal/Pahalı düğmesi fiyatı değiştirir: aranan üründe zam çoğu zaman kazandırır."
   ],
   tips: [
     "Baloncuklara art arda hızlı dokun: kombo x2.0'a kadar çıkar!",
-    "📦 'Bitti!' baloncuğuna basarsan 3 adet acil tedarik gelir (biraz pahalı ama satış durmaz).",
-    "Buzdolabın yoksa ekmek, süt, simit gibi taze ürünlerin üçte biri gece bozulur. Az al!",
-    "Yağmurlu günlerde şemsiye rafını doldur — 7 kat talep!",
+    "📦 'Bitti!' baloncuğuna basarsan 3 adet acil tedarik gelir (pahalı ama satış durmaz).",
+    "Buzdolabı taze ürünlerin ömrünü uzatır ama elektrik yer ve bozulabilir; çok taze ürün satmıyorsan alma.",
+    "Yağmurlu günlerde şemsiye rafını doldur — 7 kat talep, zam bile kabul eder!",
     "Sıcak günlerde dondurma, karlı günlerde salep kral.",
     "👋 Komşu ve 🐈 Pamuk baloncukları ceza vermez ama memnuniyeti artırır.",
     "⭐ Altın baloncuk çok kısa yaşar ama büyük ödül verir. Gözünü dört aç!",
     "🟤 İnatçı leke 3 dokunuş ister; erken başla.",
-    "Memnuniyet yüksekse yarın daha çok müşteri gelir.",
-    "Hızlı Geç günü atlar ama baloncuk kazancını kaçırırsın (~%20+ daha az).",
-    "Çırak Ali kaçırdığın baloncukların cezasını bazen önler — ama ödülü sen alırsın, o almaz.",
-    "Toptancı İndirimi günlerinde stok yapmak çok kârlı.",
+    "Memnuniyet yüksekse yarın daha çok müşteri gelir ve rakibe giden müşteri azalır.",
+    "Hızlı Geç günü atlar: baloncuk cezalarını, hırsızı ve arızayı sen karşılarsın.",
+    "Çırak Ali kaçırdığın baloncukların cezasını bazen önler ama maaş ister; sen zaten yetişiyorsan gereksiz.",
+    "Toptancı İndirimi günlerinde stok yap, ama raf ömrüne ve yuvana dikkat.",
     "Pazar günü kahvaltılıkları, cumartesi içecekleri doldur.",
     "Mahalle sakinlerinin sevdiği ürünü rafta tut; bahşişleri cömerttir.",
-    "Paran biterse üzülme: Pamuk'un kumbarasında hep biraz bozukluk vardır 🐷",
+    "Zincir Market kampanya yaptığı kategoride fiyatını düşürmezsen müşteri kaçar; ama her indirim kârından yer.",
     "Günün hedefi ekstra ₺ ve itibar verir; sabah kartına göz at.",
     "2x hızda baloncuklar da hızlanır, dikkat!",
-    "Yazar kasa bozuk para derdini, paspas yer silme işini azaltır."
+    "Kamera & Alarm, hırsızın en iyi ilacıdır; Pamuk'un yatağı da azıcık yardım eder 🐈",
+    "Dolap ve kasa için sabah 'Bakım yaptır': arıza sonrası tamir iki kat pahalı.",
+    "Borcunu erken öde: faiz her gün işler.",
+    "Salvo geldiğinde önce halkası kırmızıya dönen baloncuğa bas."
   ],
   // Ek: sabah kartında olaysız günler için rastgele küçük cümleler
   quietDay: [
@@ -542,7 +824,11 @@ const STORY = {
     "Bugün sıradan ama güzel bir gün olacak.",
     "Kuşlar tentede cıvıldıyor."
   ],
-  piggyBank: "🐷 Pamuk kumbarasını devirdi: +₺20! Yeniden başlamak için yeter."
+  piggyBank: "🐷 Pamuk kumbarasını devirdi: +₺{n}! Yeniden başlamak için yeter. (Kalan kumbara hakkı: {left})",
+  bankrupt: [
+    "Hasan Abi kepenkleri kapattı: borcu ödeyemedin…",
+    "Pamuk ağır ağır kutusuna kıvrıldı. Ama her iflas bir ders; yarın yeni bir köşe, yeni bir şans!"
+  ]
 };
 
-if (typeof module !== "undefined") module.exports = { BALANCE, PRODUCTS, UPGRADES, BUBBLE_TYPES, WEEKDAYS, WEATHERS, DAY_EVENTS, GENERIC_GOALS, REGULARS, LEVELS, STORY };
+if (typeof module !== "undefined") module.exports = { BALANCE, DIFFICULTIES, DIFF_ORDER, RIVAL, PRODUCTS, UPGRADES, BUBBLE_TYPES, CRISES, HINTS, WEEKDAYS, WEATHERS, DAY_EVENTS, GENERIC_GOALS, REGULARS, LEVELS, STORY };
