@@ -238,6 +238,64 @@
     shutter(delay) {
       sweep({ from: 2600, to: 380, dur: 0.55, vol: 0.12, delay: delay || 0, q: 1.1 });
     },
+    // ---- Mekanik olay sesleri (render.js olaylarından): hepsi kısa, yumuşak ve sessiz-güvenli ----
+    // Hırsız kaçtı: iki perdeli kısa alarm (4 vuruş)
+    alarm() {
+      for (let i = 0; i < 4; i++) tone({ type: "triangle", freq: i % 2 ? 660 : 880, dur: 0.11, vol: 0.2, delay: i * 0.13, attack: 0.004 });
+      tone({ type: "sine", freq: 1320, dur: 0.3, vol: 0.05, delay: 0.5 });
+    },
+    // Hırsız yakalandı: yükselen "ta-da" + parlak ding
+    catch() {
+      [523, 659, 784].forEach((f, i) => tone({ type: "triangle", freq: f, dur: 0.14, vol: 0.24, delay: i * 0.08 }));
+      tone({ type: "sine", freq: 1568, dur: 0.5, vol: 0.14, delay: 0.26 });
+      tone({ type: "sine", freq: 1568 * 2.76, dur: 0.18, vol: 0.03, delay: 0.26 });
+    },
+    // Arıza "pzzt": yüksek bantlı gürültü + kısa testere
+    zap() {
+      sweep({ from: 4200, to: 700, dur: 0.22, vol: 0.2, q: 1.4, attack: 0.005 });
+      tone({ type: "sawtooth", freq: 140, to: 70, glide: 0.12, dur: 0.16, vol: 0.12, attack: 0.004 });
+    },
+    // Onarım: üç metal "tink" + tamam çanı
+    repair() {
+      [0, 0.17, 0.34].forEach((d, i) => { tone({ type: "square", freq: 1900 + i * 140, dur: 0.045, vol: 0.09, delay: d, attack: 0.002 }); tone({ type: "triangle", freq: 640, to: 420, glide: 0.04, dur: 0.06, vol: 0.12, delay: d }); });
+      tone({ type: "sine", freq: 1319, dur: 0.35, vol: 0.18, delay: 0.55 }); tone({ type: "sine", freq: 1760, dur: 0.4, vol: 0.14, delay: 0.62 });
+    },
+    // Kriz kartı açıldı: yumuşak "dıng-dong"
+    card() {
+      tone({ type: "sine", freq: 784, dur: 0.32, vol: 0.2, attack: 0.005 }); tone({ type: "sine", freq: 1175, dur: 0.4, vol: 0.15, delay: 0.12, attack: 0.005 });
+      tone({ type: "sine", freq: 784 * 2.76, dur: 0.12, vol: 0.03, attack: 0.003 });
+    },
+    // Yoğun saat: çifte zil
+    salvo() {
+      Sfx.bell(); setTimeout(() => Sfx.bell(), 150);
+      tone({ type: "triangle", freq: 1568, dur: 0.18, vol: 0.12, delay: 0.32 });
+    },
+    // Kamyon kornası
+    horn() {
+      tone({ type: "sawtooth", freq: 196, dur: 0.34, vol: 0.1, attack: 0.02 }); tone({ type: "sawtooth", freq: 247, dur: 0.34, vol: 0.09, attack: 0.02 });
+      tone({ type: "sawtooth", freq: 196, dur: 0.3, vol: 0.1, delay: 0.42, attack: 0.02 }); tone({ type: "sawtooth", freq: 247, dur: 0.3, vol: 0.09, delay: 0.42, attack: 0.02 });
+    },
+    // Jeneratör gürültüsü
+    rumble() {
+      sweep({ from: 260, to: 90, dur: 1.2, vol: 0.2, type: "lowpass", q: 0.7, attack: 0.15 });
+      tone({ type: "sawtooth", freq: 54, dur: 1.1, vol: 0.07, attack: 0.1 });
+    },
+    // Kira günü: bozuk para yağmuru
+    coinsRent() {
+      for (let i = 0; i < 7; i++) tone({ type: "triangle", freq: 1250 + (i % 3) * 230 + (i * 37) % 90, dur: 0.1, vol: 0.13, delay: i * 0.075, attack: 0.002 });
+      tone({ type: "triangle", freq: 880, to: 440, glide: 0.4, dur: 0.5, vol: 0.1, delay: 0.55 });
+    },
+    // İflas: alçalan minör notalar + kepenk
+    bankrupt() {
+      [392, 349, 311, 262].forEach((f, i) => tone({ type: "sine", freq: f, dur: i === 3 ? 0.9 : 0.32, vol: 0.26, delay: i * 0.26, attack: 0.02 }));
+      tone({ type: "triangle", freq: 131, dur: 1.2, vol: 0.1, delay: 0.7, attack: 0.05 });
+      Sfx.shutter(0.15);
+    },
+    // Raftaki ürün bozuldu: alçak "blup"
+    spoil() {
+      tone({ type: "sine", freq: 300, to: 110, glide: 0.2, dur: 0.26, vol: 0.28, attack: 0.01 });
+      tone({ type: "sine", freq: 230, to: 90, glide: 0.2, dur: 0.24, vol: 0.18, delay: 0.14, attack: 0.01 });
+    },
     // Hava ortamı: "rain" | "snow" | "wind" | "hot"; diğerleri sessiz
     ambient(kind) {
       ambKind = kind || null;

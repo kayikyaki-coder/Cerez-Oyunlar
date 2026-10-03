@@ -220,7 +220,7 @@
     // çok aranacaklar
     const hot = D.PRODUCTS.filter((pr) => s.unlocked[pr.id]).map((pr) => ({ pr, r: (p.heat && p.heat[pr.id]) || (p.demand[pr.id] || 0) / (pr.demand || 1) }))
       .filter((x) => x.r >= 1.25).sort((a, b) => b.r - a.r).slice(0, 4);
-    if (hot.length) html += '<div class="dc-hot">🔥 Çok aranacak: ' + hot.map((x) => '<span class="hp">' + x.pr.emoji + " " + esc(x.pr.name) + "</span>").join("") + "</div>";
+    if (hot.length) html += '<div class="dc-hot">🔥 Çok aranacak: ' + hot.map((x) => '<span class="hotp">' + x.pr.emoji + " " + esc(x.pr.name) + "</span>").join("") + "</div>";
     $("daycard").innerHTML = html;
   }
 
@@ -478,6 +478,8 @@
     const p = Math.min(1, run.t / (run.length || 60));
     setIf("clock", Math.floor(p * 200), () => {
       $("hud-clock-fill").style.width = p * 100 + "%";
+      $("hud-clock-fill").style.setProperty("--p", p.toFixed(3));      // CSS: gradyan dolguda sabah→akşam rengi
+      $("hud-clock-fill").parentElement.classList.toggle("closing", p > 0.9);
       const sun = $("hud-clock-sun"); sun.style.left = p * 100 + "%"; sun.textContent = p < 0.72 ? "☀️" : p < 0.95 ? "🌇" : "🌙";
       const mins = Math.floor(8 * 60 + p * 12 * 60);
       $("hud-clock-txt").textContent = String(Math.floor(mins / 60)).padStart(2, "0") + ":" + String(Math.floor(mins / 10) * 10 % 60).padStart(2, "0") +
@@ -554,7 +556,7 @@
         v.options.map((o, i) => '<button class="btn gold cc-opt" data-crisis="' + esc(o.id) + '"' + (o.affordable ? "" : " disabled") + "><span class=\"k\">" + (i + 1) + "</span><span class=\"t\"><b>" + esc(o.label) +
           (o.cost ? " · " + fmt(o.cost) : "") + "</b><small>" + esc(o.hint) + "</small></span></button>").join("") +
         '<button class="btn cream cc-opt ig" data-crisis="ignore"><span class="k">0</span><span class="t"><b>Görmezden gel</b><small>' + esc(v.ignore.hint) + "</small></span></button></div>";
-      el.classList.remove("hidden"); sfx("tap");
+      el.classList.remove("hidden"); sfx("card");
     }
     const bar = el.querySelector(".cc-time i"); if (bar) bar.style.width = (100 * v.timeLeft / v.total).toFixed(1) + "%";
     el.classList.toggle("urgent", v.timeLeft < 3);
@@ -600,6 +602,7 @@
     const cell = (l, v, extra, cls) => '<div class="rcell ' + (cls || "") + '"><div class="l">' + l + '</div><div class="v">' + v + "</div>" + (extra ? '<div class="s">' + extra + "</div>" : "") + "</div>";
     const fx = s.fixed || { utility: 0, rent: 0, interest: 0, repaid: 0, shortfall: 0 };
     const fixedTotal = fx.utility + fx.rent + fx.interest + (fx.storage || 0);
+    if (fx.rent > 0 && !restored) setTimeout(() => sfx("coinsRent"), 450);   // kira günü akşamı bozuk para sesi
     setAtmos(null); $("app").dataset.phase = "evening";
     let html = "<h2>" + (s.bankrupt ? "Gün " + s.day + " — iflas 🔒" : s.mode === "skip" ? "Gün " + s.day + " " + (s.forfeit ? "başıboş geçti" : "hızlıca bitti") + " ⏩" : "Gün " + s.day + " bitti! 🌙") + "</h2>" +
       '<div class="sub">' + esc(sub || "Kepenkler indi, sokak lambaları yandı.") + "</div>";

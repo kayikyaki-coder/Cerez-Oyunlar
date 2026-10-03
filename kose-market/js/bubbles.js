@@ -155,7 +155,7 @@
     if (p.lostCustomers) return "Müşteri kaçtı";
     if (p.lostSalesSec) return "Satış durdu";
     if (p.money) return "~₺" + Math.abs(p.money) + " zarar";
-    if (p.sat) return "Memnuniyet " + p.sat;
+    if (p.sat) return "Memnuniyet −" + Math.max(1, Math.round(Math.abs(p.sat)));
     return "Kaçırdın";
   }
 
@@ -258,6 +258,10 @@
         }
         this._paint(o);
       }
+      // 3+ baloncuk varken (yoğun saat) kalan ömrü en kısa olan ▼ ile işaretlenir: önce onu çöz
+      let first = null, n = 0;
+      for (const o of live.values()) { if (o.dying) continue; n++; const left = o.life - o.age; if (!first || left < first.left) first = { o, left }; }
+      for (const o of live.values()) { const on = n >= 3 && first && first.o === o; if (on !== o.first) { o.first = on; o.el.classList.toggle("km-first", on); } }
     },
 
     feedback(id, result) {
@@ -269,9 +273,9 @@
         burst(o.x, o.y, o.golden);
         const combo = result.combo || 1;
         const tag = combo > 1.001 ? "x" + combo.toFixed(1) : null;
-        if (result.crisis) floatText(o.x, o.y - 30, "Karar!", "gold");
+        if (result.crisis) floatText(o.x, o.y - 30, "Karar!", "note gold");
         else if (result.reward > 0) floatText(o.x, o.y - 30, "+₺" + result.reward, o.golden ? "gold" : "", tag);
-        else if (result.special === "break") floatText(o.x, o.y - 30, "Arıza önlendi", "", null);
+        else if (result.special === "break") floatText(o.x, o.y - 30, "Arıza önlendi", "note", null);
         restartAnim(o.el, "km-popped");
         removeAfterAnim(o.el, 600);
         sfx("pop", combo);

@@ -13,7 +13,8 @@
     red: "#e3502c", red2: "#c63d1d", cream: "#fff3e0", cream2: "#fff8ec", card: "#fffaf2", edge: "#ffe4c0",
     wall: "#fde9cf", wall2: "#f7dcbb", wood: "#9a6438", wood2: "#71472a", wood3: "#b98150", woodL: "#d9a46c",
     ink: "#3a2a1f", ink2: "#6b5443", green: "#2f9e54", green2: "#247c41", gold: "#f2b134", gold2: "#c98a16",
-    blue: "#3b8ed0", pink: "#ff8fab", pinkSoft: "#ffe6ee"
+    blue: "#3b8ed0", pink: "#ff8fab", pinkSoft: "#ffe6ee",
+    green3: "#1a5f31", red3: "#a8321d", steel: "#8e98a3", steel2: "#6f7a86", rivalBlue: "#4a6fc4", rivalBlue2: "#34519a"
   };
   const BLOB_COLORS = ["#ffb3c1", "#a0d8ef", "#b8e0a8", "#ffd59e", "#cdb4f6", "#ffc8a2", "#9ee6cf", "#f7a8d8", "#b5c7ff", "#ffe08a"];
 
@@ -117,7 +118,18 @@
     // önbellek
     layerSig: null, prodSig: null, L: {}, skyT: -9,
     payQ: [], prints: [], banner: null, windT: 0,
-    lastDraw: 0, frameEma: 16, slowFrames: 0
+    lastDraw: 0, frameEma: 16, slowFrames: 0,
+    // mekanik görselleri
+    thief: null,             // sahnedeki hırsız (müşteri nesnesi)
+    crisis: null,            // açık kriz sahnesi {id, emoji, t0}
+    crisisEnd: 0,            // kriz sonucu efekti bitişi
+    blackout: 0,             // elektrik krizi: karanlık süresi (sn); Infinity = çözülene dek
+    salvoT: 0, flashT: 0, flashAt: null, alert: "",
+    brk: { fridge: false, register: false }, eqc: { fridge: 100, register: 100 },
+    fxT: { spark: 0, smoke: 0, drip: 0, rival: 0 }, repairs: [],
+    shut: 0, shutTarget: 0, shutSnd: false,
+    spoilSlots: [], psT: -9, psCache: "", warn: { fridge: 0, register: 0 }, redT: 0, blastT: 0, blastAt: null, gen: 0, debtT: 0, debtLv: 0, salvoSeq: 0, salvoTO: 0,
+    layerEl: null, appEl: null
   };
 
   const zones = {
@@ -205,6 +217,19 @@
   function shelfCap() { const g = G(); try { return (g && g.shelfCap && g.shelfCap()) || 8; } catch (e) { return 8; } }
   function effects() { const g = G(); try { return (g && g.effects && g.effects()) || {}; } catch (e) { return {}; } }
 
+  const wearOf = (c) => (c < 35 ? 2 : c < 65 ? 1 : 0);
+  // ekipman durumu + borç düzeyi (çizim kararlarını etkiler)
+  function readEq() {
+    const st = curState() || {}, b = st.broken || {}, e = st.equip || {};
+    S.brk.fridge = !!b.fridge && !!S.upg.fridge; S.brk.register = !!b.register;
+    S.eqc.fridge = e.fridge == null ? 100 : e.fridge; S.eqc.register = e.register == null ? 100 : e.register;
+  }
+  function debtLevel() {
+    const st = curState() || {}, d = st.debt || 0; if (d <= 0) return 0;
+    let lim = 0; try { const g = G(); lim = g && g.finance ? (g.finance().debtLimit || 0) : 0; } catch (e) { lim = 0; }
+    return lim && d >= lim * 0.55 ? 2 : 1;
+  }
+
   function relayout() {
     const list = unlockedProducts();
     const extra = S.upg.shelf ? 1 : 0;
@@ -270,9 +295,10 @@
   }
 
   // data.js UPGRADES[].scene → sahne öğesi
+  // (UPGRADES[].sceneLevels yoksa görsel fark seviye numarasından türetilir: S.upg[anahtar] = seviye)
   const SCENE_MAP = { raf: "shelf", tabela: "sign", yazarkasa: "register", paspas: "mat", buzdolabi: "fridge", vitrin: "vitrin",
     cirak: "helper", onluk: "apron", kediyatagi: "catbed", bitkiler: "plant", lamba: "lamp", muzik: "music", tente: "awning",
-    buyukacilis: "grand", toptanci: "deal" };
+    buyukacilis: "grand", toptanci: "deal", guvenlik: "camera", sadakat: "loyalty", depo: "depot" };
 
   function weatherKind(w) {
     const k = norm((w && (w.id + " " + (w.name || ""))) || "");
@@ -333,7 +359,7 @@
 
   function addCustomer(cid, look) {
     // ekranda çok kişi birikirse en eskisini at
-    if (S.customers.length > 13) { const old = S.customers.shift(); delete S.cidMap[old.cid]; freePay(old); }
+    if (S.customers.length > 15) { const oi = S.customers.findIndex(q => !q.prop); if (oi >= 0) { const old = S.customers.splice(oi, 1)[0]; delete S.cidMap[old.cid]; freePay(old); } }
     const hy = 470 + ((hash(cid) % 5) * 8);
     const c = {
       cid, look: lookOf(look, cid), x: L.door.x + 46, y: hy, homeY: hy, alpha: 0,
@@ -378,18 +404,18 @@
 
   function stepCustomer(c, dt) {
     c.walkT += dt; if (c.hop > 0) c.hop = Math.max(0, c.hop - dt * 2.2); if (c.heart > 0) c.heart -= dt;
-    if (c.wet > 0) c.wet -= dt;
-    c.moving = false;
+    if (c.wet > 0) c.wet -= dt; if (c.mad > 0) c.mad -= dt;
+    c.moving = false; c.sneak = false;
     if (c.alpha < 1 && !c.leaving) c.alpha = Math.min(1, c.alpha + dt * 3);
     if (!c.cur && c.q.length) { c.cur = c.q.shift(); c.cur.t = 0; }
     const a = c.cur;
-    if (!a) { c.idle += dt; if (c.idle > 25) c.q.push({ k: "leave" }); return; }
+    if (!a) { if (c.prop) return; c.idle += dt; if (c.idle > 25) c.q.push({ k: "leave" }); return; }
     c.idle = 0; a.t += dt;
     // kuyrukta çok iş biriktiyse hızlan
     const rush = 1 + Math.min(2, c.q.length * 0.35);
     switch (a.k) {
       case "walk": {
-        const sp = 150 * rush, dx = a.x - c.x, dy = a.y != null ? a.y - c.y : 0, dist = Math.hypot(dx, dy);
+        const sp = 150 * rush * (c.spd || 1), dx = a.x - c.x, dy = a.y != null ? a.y - c.y : 0, dist = Math.hypot(dx, dy);
         if (dist < 3) { c.x = a.x; if (a.y != null) c.y = a.y; c.cur = null; break; }
         const step = Math.min(dist, sp * dt);
         c.x += dx / dist * step; c.y += dy / dist * step;
@@ -399,13 +425,19 @@
         return;
       }
       case "wait": if (a.t >= a.d / rush) c.cur = null; break;
+      case "sneak": { // hırsız: raf önünde etrafa bakınır (dışarıdan eylem listesi değişene dek sürer)
+        if (!a.dir) a.dir = 1;
+        if (Math.floor(a.t * 1.7) % 2 === 0) c.dir = a.dir; else c.dir = -a.dir;
+        c.sneak = true; return;
+      }
+      case "caught": c.caught = true; c.sneak = false; if (a.t >= a.d) { c.caught = false; c.cur = null; } return;
       case "grab": {
         c.think = null;
         const s = slotFor(a.pid);
         if (s) spawnFly(productEmoji(a.pid), s.x, s.y - 16, c.x, c.y - 50);
         c.carried.push(productEmoji(a.pid)); c.amount += a.amount || 0; c.cur = null; sfx("shelf"); break;
       }
-      case "sad": c.think = null; c.sad = 1.2; c.happy = false; if (a.t > 0.9) c.cur = null; break;
+      case "sad": c.think = null; c.sad = 1.2; c.happy = false; if (a.mad) c.mad = 1.5; if (a.t > 0.9) c.cur = null; break;
       case "pay": {
         if (!a.done && a.t > 0.35) {
           a.done = true;
@@ -417,7 +449,7 @@
       case "leave": c.leaving = true; freePay(c); c.q.unshift({ k: "exit" }); c.cur = null; if (c.happy !== false) c.hop = 1; break;
       case "exit": {
         const tx = L.door.x + 46, dx = tx - c.x;
-        c.dir = 1; c.x += Math.min(Math.abs(dx), 170 * rush * dt); c.moving = true;
+        c.dir = 1; c.x += Math.min(Math.abs(dx), 170 * rush * (c.spd || 1) * dt); c.moving = true;
         if (Math.abs(dx) < 40) { c.alpha -= dt * 4; if (Math.abs(dx) < 50 && S.doorOpen < 0.3) S.doorOpen = 0.5; }
         if (c.alpha <= 0 || Math.abs(dx) < 2) { c.gone = true; freePay(c); }
         return;
@@ -449,7 +481,7 @@
   function sparkles(x, y, n) {
     for (let i = 0; i < n; i++) pushPart({ k: "spark", x: x + (Math.random() - .5) * 30, y: y + (Math.random() - .5) * 24, vx: 0, vy: -14, life: .8, max: .8, r: 4 + Math.random() * 3 });
   }
-  function spawnFly(e, x0, y0, x1, y1) { pushPart({ k: "fly", e, x0, y0, x1, y1, life: .45, max: .45, size: 22 }); }
+  function spawnFly(e, x0, y0, x1, y1, d) { d = d || 0; pushPart({ k: "fly", e, x0, y0, x1, y1, life: .45 + d, max: .45 + d, d, size: 22 }); }
   function confetti(n) {
     if (S.reduce) return;
     const cols = ["#ff9db6", "#ffd57e", "#9dcfe8", "#a4d9ba", "#d3bff6", "#ffab7e"];
@@ -490,9 +522,15 @@
         case "spark": ctx.save(); ctx.globalAlpha = a; star4(ctx, p.x, p.y, p.r * (0.6 + 0.4 * a), "#ffe27a"); ctx.restore(); break;
         case "emo": emo(ctx, p.e, p.x, p.y, p.size, a); break;
         case "fly": {
-          const t = 1 - p.life / p.max, x = lerp(p.x0, p.x1, t), y = lerp(p.y0, p.y1, t) - Math.sin(t * Math.PI) * 40;
+          if (p.max - p.life < (p.d || 0)) break;
+          const t = clamp((p.max - p.life - (p.d || 0)) / 0.45, 0, 1), x = lerp(p.x0, p.x1, t), y = lerp(p.y0, p.y1, t) - Math.sin(t * Math.PI) * 40;
           emo(ctx, p.e, x, y, p.size); break;
         }
+        case "smoke": { const k = 1 - p.life / p.max; ctx.save(); ctx.globalAlpha = (1 - k) * 0.55; circle(ctx, p.x, p.y, p.r + k * 10, p.dark ? "#6b6f78" : "#d8d8d8"); ctx.restore(); break; }
+        case "spark2": ctx.save(); ctx.globalAlpha = a; ctx.strokeStyle = "#ffe27a"; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(p.x, p.y); ctx.lineTo(p.x - p.vx * 0.035, p.y - p.vy * 0.035); ctx.stroke(); circle(ctx, p.x, p.y, 1.5, "#fff"); ctx.restore(); break;
+        case "drip": ctx.save(); ctx.globalAlpha = a; ctx.fillStyle = "rgba(120,185,240,.9)"; ctx.beginPath(); ctx.ellipse(p.x, p.y, 1.8, 2.9, 0, 0, Math.PI * 2); ctx.fill(); ctx.restore(); break;
+        case "star": ctx.save(); ctx.globalAlpha = a; star4(ctx, p.x, p.y, p.r * (0.6 + 0.4 * a), "#ffd34d"); ctx.restore(); break;
+        case "puff": { const k = 1 - p.life / p.max; ctx.save(); ctx.globalAlpha = (1 - k) * 0.6; circle(ctx, p.x, p.y, p.r + k * 12, "#9bb24a"); ctx.restore(); break; }
         case "conf":
           ctx.save(); ctx.globalAlpha = a; ctx.translate(p.x, p.y); ctx.rotate(p.rot); ctx.fillStyle = p.c;
           if (p.dot) { ctx.beginPath(); ctx.arc(0, 0, 3, 0, Math.PI * 2); ctx.fill(); } else ctx.fillRect(-4, -2.5, 8, 5);
@@ -508,9 +546,10 @@
     ctx.save(); ctx.globalAlpha = outT;
     const w = 230, h = 34;
     // kuyruklar
-    ctx.fillStyle = C.red2;
+    const salvo = b.kind === "salvo";
+    ctx.fillStyle = salvo ? "#8f3008" : C.red2;
     [[-1, cx - w / 2], [1, cx + w / 2]].forEach(([s, ex]) => { ctx.beginPath(); ctx.moveTo(ex, y - h / 2 + 8); ctx.lineTo(ex + s * 34, y - h / 2 + 8); ctx.lineTo(ex + s * 22, y + 8); ctx.lineTo(ex + s * 34, y + h / 2 + 8); ctx.lineTo(ex, y + h / 2 + 8); ctx.closePath(); ctx.fill(); });
-    rr(ctx, cx - w / 2, y - h / 2, w, h, 8); ctx.fillStyle = C.red; ctx.fill(); ctx.lineWidth = 3; ctx.strokeStyle = "#fff"; ctx.stroke();
+    rr(ctx, cx - w / 2, y - h / 2, w, h, 8); ctx.fillStyle = salvo ? "#c2410c" : C.red; ctx.fill(); ctx.lineWidth = 3; ctx.strokeStyle = "#fff"; ctx.stroke();
     star4(ctx, cx - w / 2 + 20, y, 8, C.gold); star4(ctx, cx + w / 2 - 20, y, 8, C.gold);
     txt(ctx, b.text, cx, y + 1, 19, "#fff", 700);
     ctx.restore();
@@ -534,6 +573,48 @@
       default: top = "#7fc8f0"; bot = "#d6f0ff";
     }
     return { top, bot };
+  }
+  // Rakip: karşı kaldırımda mavi-beyaz "Zincir Market" (kampanya patlaması, açılış balonları, önünde kuyruk; pay arttıkça kalabalık büyür)
+  function drawRivalOutside(ctx, x, y, w, h, key, baseY, lit, t, R) {
+    const rv = S.plan && S.plan.rival; if (!rv || !rv.active) return;
+    const win = key !== "door", camp = rv.campaign, share = rv.share != null ? rv.share : 0.12;
+    const bh = win ? h * 0.5 : h * 0.5, bw = win ? w * 0.46 : w + 8, bx = win ? x + w - bw + 3 : x - 4, top = baseY - bh;
+    ctx.fillStyle = C.rivalBlue; ctx.fillRect(bx, top, bw, bh);
+    ctx.fillStyle = C.rivalBlue2; ctx.fillRect(bx, top, bw, 5); ctx.fillRect(bx, baseY - 4, bw, 4);
+    // levha
+    const sh = win ? 25 : 28;
+    rr(ctx, bx + 4, top + 7, bw - 8, sh, 4); ctx.fillStyle = "#fff"; ctx.fill();
+    txt(ctx, "ZİNCİR", bx + bw / 2, top + 7 + (win ? 8.5 : 9), win ? 11.5 : 12.5, C.rivalBlue2, 700); txt(ctx, "MARKET", bx + bw / 2, top + 7 + (win ? 19 : 21), win ? 9 : 9.5, C.red2, 700);
+    // tente
+    const ay = top + 10 + sh;
+    for (let i = 0, ax = bx + 2; ax < bx + bw - 2; ax += 9, i++) { ctx.fillStyle = i % 2 ? "#fff" : C.red2; ctx.fillRect(ax, ay, 9, 8); }
+    // vitrin pencereleri + kapı
+    const wy = ay + 12;
+    for (let i = 0; i < 3; i++) { rr(ctx, bx + 6 + i * (bw - 12) / 3, wy, (bw - 12) / 3 - 4, win ? 9 : 22, 2); ctx.fillStyle = lit > 0.2 ? "#ffe9a8" : "#d8e8ff"; ctx.fill(); }
+    rr(ctx, bx + bw / 2 - 6, baseY - 20, 12, 20, 2); ctx.fillStyle = lit > 0.2 ? "#ffe9a8" : "#eef4ff"; ctx.fill();
+    // kampanya: sarı patlama + kırmızı kurdele
+    if (camp) {
+      const m = /%\s*(\d+)/.exec(camp.text || ""), pct = m ? m[1] : "15", cx = bx + (win ? bw * 0.2 : bw * 0.5), cy = top - (win ? 3 : 0) + (win ? 2 : 14), r = win ? 15 : 17;
+      ctx.beginPath(); for (let i = 0; i < 16; i++) { const a = i * Math.PI / 8, rad = i % 2 ? r * 0.72 : r; ctx.lineTo(cx + Math.cos(a) * rad, cy + Math.sin(a) * rad); } ctx.closePath();
+      ctx.fillStyle = "#ffd23f"; ctx.fill(); ctx.lineWidth = 2; ctx.strokeStyle = C.red2; ctx.stroke();
+      txt(ctx, "%" + pct, cx, cy + 0.5, win ? 9.5 : 11, C.red2, 700);
+      const ry2 = wy + (win ? 15 : 30);
+      rr(ctx, bx + 5, ry2, bw - 10, win ? 10 : 12, 3); ctx.fillStyle = C.red2; ctx.fill(); txt(ctx, "KAMPANYA", bx + bw / 2, ry2 + (win ? 5.4 : 6.4), win ? 7.8 : 9, "#fff", 700);
+    }
+    // açılış günü: balonlar
+    if (S.plan && S.plan.day === rv.open && win) [["#ff9db6", 0.2], ["#ffd57e", 0.5], ["#9dcfe8", 0.8]].forEach(([cl, q], i) => { const bx2 = bx + bw * q, by2 = top - 12 + (R ? 0 : Math.sin(t * 1.6 + i) * 2); ctx.strokeStyle = "rgba(60,40,30,.5)"; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(bx2, by2 + 7); ctx.lineTo(bx2, top); ctx.stroke(); ellipse(ctx, bx2, by2, 5.5, 7, cl); });
+    if (!win) return;
+    // karşı kaldırımda kuyruk: pay arttıkça kalabalık (1-7 kişi) + dükkâna doğru yürüyenler
+    const n = clamp(Math.round(share / 0.3 * 6), 1, 7), cols = ["#ffb3c1", "#a0d8ef", "#b8e0a8", "#ffd59e", "#cdb4f6", "#ffc8a2", "#9ee6cf"];
+    for (let i = 0; i < n; i++) {
+      const px = bx + bw / 2 - 6 - i * 8.4, py = baseY + 9 + (i % 2) * 3 - (R ? 0 : Math.abs(Math.sin(t * 3 + i * 1.7)) * 1.1);
+      ellipse(ctx, px, py + 4, 3.6, 1.2, "rgba(0,0,0,.18)"); ellipse(ctx, px, py, 3.7, 4.7, cols[i % cols.length]); circle(ctx, px - 1.2, py - 1.4, .7, C.ink); circle(ctx, px + 1.2, py - 1.4, .7, C.ink);
+    }
+    const walkers = clamp(Math.round((rv.lost || 0) / 2), share > 0.2 ? 1 : 0, 3);
+    for (let i = 0; i < walkers; i++) {
+      const span = Math.max(20, bx - x + 20), px = x - 4 + ((R ? i * 0.3 : t * 13 + i * 0.37) * (R ? span : 1) % span), py = baseY + 14;
+      ellipse(ctx, px, py + 4, 3.6, 1.2, "rgba(0,0,0,.18)"); ellipse(ctx, px, py, 3.7, 4.7, cols[(i + 3) % cols.length]);
+    }
   }
   function drawOutside(ctx, x, y, w, h, key) {
     const t = S.time, p = dayProgress(), kind = S.wkind, R = S.reduce;
@@ -572,6 +653,7 @@
       ctx.fillStyle = "rgba(0,0,0,.08)"; ctx.fillRect(hx, baseY - hh, hw, 4);
       if (kind === "snow") { ctx.fillStyle = "#fff"; rr(ctx, hx - 2, baseY - hh - 4, hw + 4, 7, 3); ctx.fill(); }
     }
+    drawRivalOutside(ctx, x, y, w, h, key, baseY, lit, t, R);
     // ağaç (rüzgârda eğilir)
     const tx = x + w * (key === "door" ? 0.78 : 0.18), bend = kind === "wind" && !R ? Math.sin(t * 2.2) * 6 + 6 : (R ? 0 : Math.sin(t * .8) * 1.5);
     ctx.fillStyle = "#8a5a36"; ctx.fillRect(tx - 3, baseY - 26, 6, 26);
@@ -751,30 +833,80 @@
       ctx.fillStyle = C.woodL; ctx.fillRect(s.x, y, s.x1 - s.x, 3);
     });
   }
-  // raf ürünleri + fiyat etiketleri (stok değişince yenilenir)
+  // raf ürünleri + fiyat etiketleri (stok / fiyat kademesi / raf ömrü değişince yenilenir)
+  function slotInfo(sl) {
+    const g = G(), st = curState(), id = sl.p.id, stock = (st && st.stock) || {};
+    const n = Math.max(0, stock[id] || 0);
+    let tier = 1, price = sl.p.price, tonight = 0, slots = 1;
+    try { if (g && g.tierOf) tier = g.tierOf(id); } catch (e) { /* yok say */ }
+    try { if (g && g.priceOf) price = g.priceOf(id); } catch (e) { /* yok say */ }
+    try { if (g && g.stockAging) tonight = Math.min(n, g.stockAging(id).tonight || 0); } catch (e) { /* yok say */ }
+    try { if (g && g.slotsOf) slots = g.slotsOf(id) || 1; } catch (e) { /* yok say */ }
+    const heat = (S.plan && S.plan.heat && S.plan.heat[id]) || 1;
+    return { n, tier, price, tonight, big: slots > 1, hot: heat >= 1.45 };
+  }
+  function fmtPrice(v) { const r = Math.round((+v || 0) * 10) / 10; return "₺" + (Number.isInteger(r) ? r : String(r).replace(".", ",")); }
+  // Raf fiyat kademesi etiketi: Ucuz yeşil ▼, Normal krem, Pahalı kırmızı ▲ (renk + yön işareti: renk körlüğüne de uygun)
+  function priceTag(ctx, x, y, price, tier, n, low) {
+    const w = tier === 1 ? 36 : 44, h = 14;
+    ctx.fillStyle = "#9a9a9a"; ctx.fillRect(x - w / 2 + 5, y + 0.5, 2, 3); ctx.fillRect(x + w / 2 - 7, y + 0.5, 2, 3);
+    rr(ctx, x - w / 2, y + 2, w, h, 4);
+    let bg = "#fffaf2", edge = "rgba(113,71,42,.25)", fg = C.ink;
+    if (n <= 0) { bg = "#ffd9cf"; edge = "rgba(198,61,29,.5)"; fg = C.red3; }
+    else if (tier === 0) { bg = "#d9f2e1"; edge = C.green; fg = C.green3; }
+    else if (tier === 2) { bg = "#ffdccf"; edge = C.red; fg = C.red3; }
+    else if (low) { bg = "#fff1cf"; edge = "rgba(201,138,22,.7)"; }
+    ctx.fillStyle = bg; ctx.fill(); ctx.lineWidth = 1.5; ctx.strokeStyle = edge; ctx.stroke();
+    const tx = tier === 1 ? x : x - 4;
+    txt(ctx, fmtPrice(price), tx, y + 9.4, 11, fg, 700);
+    if (tier !== 1 && n > 0) {
+      const ax = x + w / 2 - 8, ay = y + 9.6, up = tier === 2;
+      tri(ctx, ax - 3.6, up ? ay + 2.6 : ay - 2.6, ax + 3.6, up ? ay + 2.6 : ay - 2.6, ax, up ? ay - 3.4 : ay + 3.4, fg);
+    }
+  }
+  // Bozulacak ürün: yeşil-gri solgun glif (önbellekli)
+  function glyphTint(e, size) {
+    checkCacheK();
+    const k = S.k || 1, key = "T|" + e + "|" + Math.round(size * k);
+    let g = glyphs.get(key);
+    if (!g) {
+      const base = glyph(e, size), cv = document.createElement("canvas"); cv.width = base.cv.width; cv.height = base.cv.height;
+      const c = cv.getContext("2d"); c.drawImage(base.cv, 0, 0);
+      c.globalCompositeOperation = "source-atop"; c.fillStyle = "rgba(120,150,70,.62)"; c.fillRect(0, 0, cv.width, cv.height);
+      c.fillStyle = "rgba(120,120,110,.28)"; c.fillRect(0, 0, cv.width, cv.height);
+      g = { cv, sw: base.sw }; glyphs.set(key, g);
+    }
+    return g;
+  }
+  function emoTint(ctx, e, x, y, size) { const g = glyphTint(e, size); ctx.drawImage(g.cv, x - g.sw / 2, y - g.sw / 2, g.sw, g.sw); }
   function paintProducts(ctx) {
-    const s = L.shelf, cap = shelfCap(), st = curState(), stock = (st && st.stock) || {};
+    const s = L.shelf, cap = shelfCap(), g = G();
+    let targets = null;
+    try { if (g && g.stockTargets && S.plan) targets = g.stockTargets(S.plan); } catch (e) { targets = null; }
+    S.spoilSlots = [];
     for (const sl of S.slots) {
-      const n = Math.max(0, stock[sl.p.id] || 0);
-      const perRow = clamp(Math.floor((sl.w - 14) / 22), 2, 9), maxVis = perRow * 2 - 1;
-      const vis = n <= 0 ? 0 : clamp(Math.round(n / Math.max(1, cap) * maxVis), 1, maxVis);
-      const step = Math.min(24, (sl.w - 30) / Math.max(1, perRow - 1));
-      const low = n > 0 && n / Math.max(1, cap) < 0.2;
+      const inf = slotInfo(sl), n = inf.n;
+      const denom = Math.max(1, (targets && targets[sl.p.id]) || cap);
+      const perRow = clamp(Math.floor((sl.w - 14) / (inf.big ? 26 : 22)), 2, 9), maxVis = perRow * 2 - 1;
+      const vis = n <= 0 ? 0 : clamp(Math.round(n / denom * maxVis), 1, maxVis);
+      const step = Math.min(inf.big ? 28 : 24, (sl.w - 30) / Math.max(1, perRow - 1));
+      const low = n > 0 && n / denom < 0.25;
+      const bad = n > 0 && inf.tonight > 0 ? Math.max(1, Math.round(vis * inf.tonight / n)) : 0;   // soldan değil sağdan başlayarak solgun
+      const fs = inf.big ? 32 : 28, bs = inf.big ? 26 : 23;
       if (vis === 0) {
         emo(ctx, sl.p.emoji, sl.x, sl.y - 18, 28, 0.22);
         ctx.setLineDash([3, 3]); ctx.strokeStyle = "rgba(198,61,29,.55)"; ctx.lineWidth = 1.5; rr(ctx, sl.x - sl.w / 2 + 6, sl.y - 34, sl.w - 12, 32, 6); ctx.stroke(); ctx.setLineDash([]);
       } else {
         const back = Math.max(0, vis - perRow), front = vis - back;
-        for (let i = 0; i < back; i++) { const px = sl.x + (i - (back - 1) / 2) * step; ellipse(ctx, px, sl.y - 8, 9, 2.4, "rgba(60,30,10,.12)"); emo(ctx, sl.p.emoji, px, sl.y - 30, 23, 0.88); }
-        for (let i = 0; i < front; i++) { const px = sl.x + (i - (front - 1) / 2) * step; ellipse(ctx, px, sl.y - 1, 11, 3, "rgba(60,30,10,.16)"); emo(ctx, sl.p.emoji, px, sl.y - 16, 28); }
+        let k = 0;
+        const place = (list, cnt, yy, size, sh) => { for (let i = 0; i < cnt; i++) { const px = sl.x + (i - (cnt - 1) / 2) * step; k++; ellipse(ctx, px, sh, size / 2.6, 2.6, "rgba(60,30,10,.14)"); (vis - k < bad ? emoTint : emo)(ctx, sl.p.emoji, px, yy, size); } };
+        place(null, back, sl.y - 30, bs, sl.y - 8);
+        place(null, front, sl.y - 16, fs, sl.y - 1);
       }
-      // fiyat etiketi: rafa klipsli küçük kart
-      const pr = sl.p.price != null ? "₺" + sl.p.price : "";
-      ctx.fillStyle = "#9a9a9a"; ctx.fillRect(sl.x - 12, sl.y + 0.5, 2, 3); ctx.fillRect(sl.x + 10, sl.y + 0.5, 2, 3);
-      rr(ctx, sl.x - 17, sl.y + 2, 34, 14, 4);
-      ctx.fillStyle = n <= 0 ? "#ffd9cf" : low ? "#fff1cf" : "#fffaf2"; ctx.fill();
-      ctx.lineWidth = 1.5; ctx.strokeStyle = n <= 0 ? "rgba(198,61,29,.5)" : low ? "rgba(201,138,22,.7)" : "rgba(113,71,42,.25)"; ctx.stroke();
-      txt(ctx, pr, sl.x, sl.y + 9.4, 11, n > 0 ? C.ink : C.red2, 700);
+      if (bad) S.spoilSlots.push({ x: sl.x, y: sl.y - 22, w: sl.w, r: Math.min(1, inf.tonight / Math.max(1, n)) });
+      priceTag(ctx, sl.x, sl.y, inf.price, inf.tier, n, low);
+      if (inf.hot && n > 0) emo(ctx, "🔥", sl.x - sl.w / 2 + 13, sl.y - 40, 13);          // "aranıyor": talep tavanda
+      if (bad) { rr(ctx, sl.x + sl.w / 2 - 25, sl.y - 44, 20, 14, 6); ctx.fillStyle = "#e7f0c8"; ctx.fill(); ctx.lineWidth = 1.4; ctx.strokeStyle = "#7d9a2e"; ctx.stroke(); emo(ctx, "⏳", sl.x + sl.w / 2 - 15, sl.y - 36.8, 10); }
     }
     // ek raf yükseltmesi: yan sepet rafı
     if (S.upg.shelf && S.slots.length) {
@@ -801,22 +933,44 @@
       if (S.upg.plant) { rr(ctx, cx - 16, 386, 32, 30, 6); ctx.fillStyle = "#e0875a"; ctx.fill(); emo(ctx, "🪴", cx, 364, 40); }
       return;
     }
-    rr(ctx, f.x, f.y, f.w, f.h, 14); ctx.fillStyle = "#e8f4fa"; ctx.fill();
-    ctx.strokeStyle = "#b9d6e6"; ctx.lineWidth = 3; ctx.stroke();
-    rr(ctx, f.x + 8, f.y + 22, f.w - 16, f.h - 40, 8); ctx.fillStyle = "#cfeaf7"; ctx.fill();
-    const g = ctx.createLinearGradient(0, f.y + 22, 0, f.y + f.h - 18); g.addColorStop(0, "rgba(255,255,255,.55)"); g.addColorStop(1, "rgba(255,255,255,0)");
-    ctx.fillStyle = g; ctx.fillRect(f.x + 8, f.y + 22, f.w - 16, 60);
+    const bad = S.brk.fridge, wear = wearOf(S.eqc.fridge);
+    rr(ctx, f.x, f.y, f.w, f.h, 14); ctx.fillStyle = bad ? "#d3dce2" : "#e8f4fa"; ctx.fill();
+    ctx.strokeStyle = bad ? "#a3b2bd" : "#b9d6e6"; ctx.lineWidth = 3; ctx.stroke();
+    rr(ctx, f.x + 8, f.y + 22, f.w - 16, f.h - 40, 8); ctx.fillStyle = bad ? "#a7b5bf" : "#cfeaf7"; ctx.fill();
+    if (!bad) {
+      const g = ctx.createLinearGradient(0, f.y + 22, 0, f.y + f.h - 18); g.addColorStop(0, "rgba(255,255,255,.55)"); g.addColorStop(1, "rgba(255,255,255,0)");
+      ctx.fillStyle = g; ctx.fillRect(f.x + 8, f.y + 22, f.w - 16, 60);
+    }
     const drinks = products().filter(p => p.fresh || p.cat === "icecek").map(p => p.emoji);
     const list = drinks.length ? drinks : ["🥛", "🧃", "🧀"];
     for (let r = 0; r < 4; r++) {
       const yy = f.y + 64 + r * 58;
-      ctx.fillStyle = "rgba(255,255,255,.8)"; ctx.fillRect(f.x + 10, yy + 12, f.w - 20, 3);
-      for (let i = 0; i < 3; i++) emo(ctx, list[(r * 3 + i) % list.length], f.x + 24 + i * 19, yy, 18);
+      ctx.fillStyle = bad ? "rgba(255,255,255,.45)" : "rgba(255,255,255,.8)"; ctx.fillRect(f.x + 10, yy + 12, f.w - 20, 3);
+      for (let i = 0; i < 3; i++) emo(ctx, list[(r * 3 + i) % list.length], f.x + 24 + i * 19, yy, 18, bad ? 0.5 : 1);
     }
-    rr(ctx, f.x + f.w - 16, f.y + 110, 6, 50, 3); ctx.fillStyle = "#9fc3d6"; ctx.fill();
-    rr(ctx, f.x + 10, f.y + 5, f.w - 20, 12, 5); ctx.fillStyle = "#3b8ed0"; ctx.fill();
-    txt(ctx, "SOĞUK", f.x + f.w / 2, f.y + 11.5, 9.5, "#fff", 700);
-    emo(ctx, "❄️", f.x + f.w / 2, f.y + f.h - 12, 11, 0.75);
+    rr(ctx, f.x + f.w - 16, f.y + 110, 6, 50, 3); ctx.fillStyle = bad ? "#7f929f" : "#9fc3d6"; ctx.fill();
+    rr(ctx, f.x + 10, f.y + 5, f.w - 20, 12, 5); ctx.fillStyle = bad ? C.red2 : "#3b8ed0"; ctx.fill();
+    txt(ctx, bad ? "ARIZALI" : "SOĞUK", f.x + f.w / 2, f.y + 11.5, 9.5, "#fff", 700);
+    if (!bad) emo(ctx, "❄️", f.x + f.w / 2, f.y + f.h - 12, 11, 0.75);
+    // yıpranma: pas lekeleri + çizikler (Sv1 az, Sv2 çok)
+    if (wear) {
+      ctx.save(); rr(ctx, f.x, f.y, f.w, f.h, 14); ctx.clip();
+      const n = wear * 3 + 1;
+      for (let i = 0; i < n; i++) { const rx = f.x + 8 + fr(i, 41) * (f.w - 16), ry = f.y + 40 + fr(i, 42) * (f.h - 70); ellipse(ctx, rx, ry, 4 + fr(i, 43) * 6, 2.5 + fr(i, 44) * 3, "rgba(168,98,44," + (0.24 + wear * 0.08).toFixed(2) + ")"); }
+      ctx.strokeStyle = "rgba(90,60,40,.28)"; ctx.lineWidth = 1.2; ctx.beginPath(); ctx.moveTo(f.x + 14, f.y + 200); ctx.lineTo(f.x + 36, f.y + 186); ctx.moveTo(f.x + 44, f.y + 90); ctx.lineTo(f.x + 60, f.y + 98); ctx.stroke();
+      ctx.restore();
+    }
+    // arıza: sarı-siyah uyarı bandı + üçgen levha
+    if (bad) {
+      ctx.save(); rr(ctx, f.x, f.y, f.w, f.h, 14); ctx.clip();
+      ctx.translate(f.x + f.w / 2, f.y + 165); ctx.rotate(-0.42);
+      ctx.fillStyle = "#ffcf33"; ctx.fillRect(-90, -9, 180, 18);
+      ctx.fillStyle = "#2c2a30"; for (let i = -9; i < 9; i++) { ctx.beginPath(); ctx.moveTo(i * 14, -9); ctx.lineTo(i * 14 + 7, -9); ctx.lineTo(i * 14 + 1, 9); ctx.lineTo(i * 14 - 6, 9); ctx.closePath(); ctx.fill(); }
+      ctx.restore();
+      tri(ctx, f.x + f.w / 2 - 14, f.y + 108, f.x + f.w / 2 + 14, f.y + 108, f.x + f.w / 2, f.y + 80, "#ffcf33", "#2c2a30", 2.5);
+      txt(ctx, "!", f.x + f.w / 2, f.y + 99, 15, "#2c2a30", 700);
+      ellipse(ctx, f.x + f.w / 2 + 6, f.y + f.h + 2, 40, 7, "rgba(110,170,215,.45)"); ellipse(ctx, f.x + f.w / 2 + 10, f.y + f.h + 1, 24, 4, "rgba(255,255,255,.4)");   // damlayan su
+    }
   }
   function paintDoorFrame(ctx) {
     const d = L.door;
@@ -886,11 +1040,16 @@
     return (S.upg.sign || S.upg.grand) ? xs.filter(x => x !== 396) : xs;
   }
   function paintMisc(ctx) {
-    if (S.upg.deal) { // toptancı kasası
-      rr(ctx, 170, 388, 44, 30, 4); ctx.fillStyle = "#d9a46c"; ctx.fill(); ctx.fillStyle = C.wood; ctx.fillRect(170, 400, 44, 3);
-      emo(ctx, "🍏", 182, 386, 14); emo(ctx, "🍊", 200, 384, 14);
+    if (S.upg.deal) { // toptancı kasası (Sv2: üst üste koli + TOPTAN etiketi)
+      const dl = S.upg.deal;
+      rr(ctx, 178, 390, 38, 28, 4); ctx.fillStyle = "#d9a46c"; ctx.fill(); ctx.fillStyle = C.wood; ctx.fillRect(178, 401, 38, 3);
+      emo(ctx, "🍏", 189, 388, 13); emo(ctx, "🍊", 205, 386, 13);
+      if (dl >= 2) {
+        rr(ctx, 183, 364, 30, 26, 4); ctx.fillStyle = "#e3b27a"; ctx.fill(); ctx.fillStyle = C.wood; ctx.fillRect(183, 374, 30, 3); emo(ctx, "🥫", 198, 361, 13);
+        rr(ctx, 176, 346, 44, 14, 4); ctx.fillStyle = C.red; ctx.fill(); ctx.lineWidth = 1.5; ctx.strokeStyle = "#fff"; ctx.stroke(); txt(ctx, "TOPTAN", 198, 353.4, 9.5, "#fff", 700);
+      }
     }
-    if (S.upg.camera) emo(ctx, "📹", 930, 70, 20);
+    if (S.upg.camera) { emo(ctx, "📹", 930, 70, 20); if (S.upg.camera >= 2) paintAlarmBox(ctx); }
     // Pamuk'un yatağı
     if (S.upg.catbed) {
       const b = L.catBed;
@@ -919,10 +1078,13 @@
     rr(ctx, x0, y, x1 - x0, 32, 10); ctx.fillStyle = grand ? C.gold : C.red; ctx.fill();
     ctx.strokeStyle = "#fff"; ctx.lineWidth = 2; rr(ctx, x0 + 4, y + 4, x1 - x0 - 8, 24, 7); ctx.stroke();
   }
+  // zorluk tonu: Kolay biraz sıcak/ışıklı, Zor kızıl, Efsane soğuk-mor ve koyu (sayı değiştirmez, yalnız hava)
+  const DIFF_TONE = { kolay: ["255,208,130", 0.07], normal: ["120,70,30", 0.12], zor: ["150,55,30", 0.2], efsane: ["70,50,110", 0.3] };
+  function diffTone() { const st = curState(); return DIFF_TONE[(st && st.diff) || "normal"] || DIFF_TONE.normal; }
   function paintVignette(ctx) {
-    const v = S.view, vw = v.x1 - v.x0;
+    const v = S.view, vw = v.x1 - v.x0, tn = diffTone();
     const g = ctx.createRadialGradient(v.x0 + vw / 2, H * 0.52, vw * 0.34, v.x0 + vw / 2, H * 0.52, vw * 0.78);
-    g.addColorStop(0, "rgba(120,70,30,0)"); g.addColorStop(1, "rgba(120,70,30,.12)");
+    g.addColorStop(0, "rgba(" + tn[0] + ",0)"); g.addColorStop(1, "rgba(" + tn[0] + "," + tn[1] + ")");
     ctx.fillStyle = g; ctx.fillRect(v.x0, 0, vw, H);
   }
   function paintNoise(ctx) {
@@ -936,26 +1098,107 @@
     const pat = ctx.createPattern(S.noise, "repeat"), v = S.view;
     ctx.save(); ctx.globalAlpha = 0.04; ctx.fillStyle = pat; ctx.fillRect(v.x0, 0, v.x1 - v.x0, H); ctx.restore();
   }
+  // ---------- yükseltme seviyesi başına görünür fark (statik; önbellekli katmana boyanır) ----------
+  function paintAlarmBox(ctx) { // Kamera & Alarm Sv2: kapı üstünde alarm kutusu (LED dinamik)
+    rr(ctx, 872, 98, 32, 24, 5); ctx.fillStyle = "#f4f1ec"; ctx.fill(); ctx.lineWidth = 2; ctx.strokeStyle = "#9aa3ab"; ctx.stroke();
+    rr(ctx, 877, 103, 22, 7, 2); ctx.fillStyle = "#2b2f33"; ctx.fill(); txt(ctx, "ALARM", 888, 106.6, 6.5, "#ff8a7a", 700);
+    circle(ctx, 888, 116, 2.6, "#7a2a2a");
+  }
+  function glassCabinet(ctx, lv) { // Raf Sv3: cam vitrin dolabı (Sv4: altın çerçeve + ışık)
+    const x = 92, y = 296, w = 84, h = 124, gold = lv >= 4;
+    contactShadow(ctx, x + w / 2, y + h + 4, w + 18);
+    rr(ctx, x, y, w, h, 8); ctx.fillStyle = gold ? "#b9863a" : C.wood2; ctx.fill();
+    rr(ctx, x + 5, y + 6, w - 10, h - 40, 5); ctx.fillStyle = "#d9eef6"; ctx.fill();            // cam
+    const gl = ctx.createLinearGradient(x, y, x + w, y + h); gl.addColorStop(0, "rgba(255,255,255,.55)"); gl.addColorStop(.5, "rgba(255,255,255,.08)"); gl.addColorStop(1, "rgba(255,255,255,.3)");
+    ctx.fillStyle = gl; ctx.fillRect(x + 5, y + 6, w - 10, h - 40);
+    ctx.fillStyle = "rgba(60,30,10,.28)"; for (let i = 1; i <= 2; i++) ctx.fillRect(x + 5, y + 6 + i * 27, w - 10, 3);   // raflar
+    const best = S.slots.slice().sort((a, b) => b.p.price - a.p.price).slice(0, 4).map(q => q.p.emoji);
+    const fill = best.length ? best : ["🍰", "🧁", "🍫", "🧀"];
+    for (let r = 0; r < 3; r++) for (let i = 0; i < 3; i++) emo(ctx, fill[(r + i) % fill.length], x + 20 + i * 22, y + 22 + r * 27, 18);
+    ctx.fillStyle = "rgba(255,255,255,.4)"; ctx.beginPath(); ctx.moveTo(x + 14, y + 6); ctx.lineTo(x + 28, y + 6); ctx.lineTo(x + 12, y + h - 34); ctx.lineTo(x + 5, y + h - 34); ctx.fill();    // yansıma
+    rr(ctx, x + 6, y + h - 28, w - 12, 20, 4); ctx.fillStyle = gold ? "#d9a752" : C.wood; ctx.fill();                  // alt kapaklar
+    ctx.fillStyle = "rgba(0,0,0,.18)"; ctx.fillRect(x + w / 2 - 1, y + h - 28, 2, 20);
+    circle(ctx, x + w / 2 - 6, y + h - 18, 2, C.gold); circle(ctx, x + w / 2 + 6, y + h - 18, 2, C.gold);
+    rr(ctx, x - 3, y - 6, w + 6, 9, 4); ctx.fillStyle = gold ? C.gold : C.wood; ctx.fill();
+    if (gold) { star4(ctx, x + w / 2, y - 14, 8, C.gold); ctx.fillStyle = "rgba(255,226,150,.35)"; ctx.fillRect(x + 6, y + 6, w - 12, 5); }
+  }
+  function depotDoor(ctx) { // Soğuk Hava Deposu: çelik kapı + buz kenarı
+    const x = 10, y = 300, w = 76, h = 120;
+    contactShadow(ctx, x + w / 2, y + h + 3, w + 14);
+    rr(ctx, x - 4, y - 6, w + 8, h + 6, 6); ctx.fillStyle = "#6f7a86"; ctx.fill();
+    rr(ctx, x, y, w, h, 4); const g = ctx.createLinearGradient(x, 0, x + w, 0); g.addColorStop(0, "#c9d3dc"); g.addColorStop(.5, "#e9eff4"); g.addColorStop(1, "#b7c2cc"); ctx.fillStyle = g; ctx.fill();
+    ctx.strokeStyle = "rgba(60,80,100,.3)"; ctx.lineWidth = 1.5; ctx.strokeRect(x + 8, y + 10, w - 16, h - 24);
+    rr(ctx, x + w - 17, y + 52, 8, 26, 3); ctx.fillStyle = "#4a5560"; ctx.fill();
+    rr(ctx, x + 4, y - 22, w - 8, 15, 5); ctx.fillStyle = C.blue; ctx.fill(); txt(ctx, "SOĞUK DEPO", x + w / 2, y - 14.2, 8.5, "#fff", 700);
+    for (let i = 0; i < 6; i++) circle(ctx, x + 4 + i * 13, y + 2, 5 + (i % 2) * 2, "rgba(255,255,255,.85)");
+    emo(ctx, "❄️", x + 20, y + h - 22, 14, .8);
+  }
+  function crateStack(ctx) { // Raf Sv2: ayrı koli/sepet yığını
+    const x = 100, y = 392;
+    for (let i = 0; i < 2; i++) { rr(ctx, x + i * 36, y, 34, 26, 4); ctx.fillStyle = "#e7b36f"; ctx.fill(); ctx.strokeStyle = "#b9803e"; ctx.lineWidth = 1.5; ctx.stroke(); for (let j = 0; j < 4; j++) { ctx.beginPath(); ctx.moveTo(x + i * 36 + 6 + j * 8, y + 3); ctx.lineTo(x + i * 36 + 6 + j * 8, y + 23); ctx.stroke(); } }
+    const em = S.slots.length ? [S.slots[0].p.emoji, (S.slots[1] || S.slots[0]).p.emoji] : ["🍎", "🍊"];
+    emo(ctx, em[0], x + 17, y - 4, 20); emo(ctx, em[1], x + 53, y - 4, 20);
+  }
+  function paintUpgrades(ctx) {
+    const u = S.upg;
+    if (u.depot) depotDoor(ctx);
+    if (u.shelf >= 3) glassCabinet(ctx, u.shelf); else if (u.shelf >= 2) crateStack(ctx);
+    if ((u.sign || 0) >= 3) { // mahalle grubuna ilan: panoya iğnelenmiş kâğıtlar
+      [[806, 226, -0.1, "#ffd1de"], [826, 232, 0.08, "#cfe6fb"]].forEach(([x, y, r, cl]) => {
+        ctx.save(); ctx.translate(x, y); ctx.rotate(r); rr(ctx, -14, -18, 28, 36, 2); ctx.fillStyle = "#fffaf2"; ctx.fill(); ctx.lineWidth = 1.4; ctx.strokeStyle = "rgba(90,60,40,.35)"; ctx.stroke();
+        ctx.fillStyle = cl; ctx.fillRect(-11, -15, 22, 8); ctx.fillStyle = "rgba(60,30,10,.28)"; for (let i = 0; i < 3; i++) ctx.fillRect(-10, -3 + i * 5, 20 - i * 4, 1.6);
+        circle(ctx, 0, -18, 2.2, C.red); ctx.restore();
+      });
+    }
+    if ((u.vitrin || 0) >= 2) { // mevsimlik süsleme: camda kâğıt kesme süsler
+      const st = curState(), d = ((st && st.day) || 1), season = ["🌸", "☀️", "🍂", "❄️"][Math.floor(((d - 1) % 40) / 10)], w = L.win;
+      emo(ctx, season, w.x + 20, w.y + 20, 20, .95); emo(ctx, "⭐", w.x + 18, w.y + 60, 15, .95); emo(ctx, season, w.x + 38, w.y + 96, 14, .9);
+    }
+    if (u.grand) { // Büyük Açılış: kapı üstünde kırmızı kurdele
+      const bx = L.door.x - 6, by = 112, bw = L.door.w + 12;
+      rr(ctx, bx, by, bw, 20, 6); ctx.fillStyle = C.red; ctx.fill(); ctx.lineWidth = 2; ctx.strokeStyle = "#fff"; ctx.stroke();
+      txt(ctx, "BÜYÜK AÇILIŞ", bx + bw / 2, by + 10.5, 10.5, "#fff", 700); star4(ctx, bx + 9, by + 10, 5, C.gold); star4(ctx, bx + bw - 9, by + 10, 5, C.gold);
+    }
+  }
   function paintBack(ctx) {
     const v = S.view;
     ctx.clearRect(v.x0, 0, v.x1 - v.x0, H);
     paintWall(ctx); paintFloor(ctx); paintShadows(ctx);
     paintWindowFrame(ctx); paintShelf(ctx); paintFridge(ctx); paintDoorFrame(ctx);
-    paintClock(ctx); paintLampsStatic(ctx); paintMisc(ctx); paintBoard(ctx); paintEventStatic(ctx); paintSignPlate(ctx);
+    paintClock(ctx); paintLampsStatic(ctx); paintMisc(ctx); paintUpgrades(ctx); paintBoard(ctx); paintEventStatic(ctx); paintSignPlate(ctx);
     paintVignette(ctx); paintNoise(ctx);
   }
   function paintFront(ctx) { // tezgâh (tezgâhtarın önünde)
-    const c = L.counter, w = c.x1 - c.x;
+    const c = L.counter, w = c.x1 - c.x, rlv = S.upg.register || 0;
+    const bad = S.brk.register, wear = wearOf(S.eqc.register), dl = S.debtLv || 0;
     // kasa
     const kx = REG.x, ky = REG.y;
     contactShadow(ctx, kx, ky + 36, 60);
-    rr(ctx, kx - 26, ky, 52, 34, 6); ctx.fillStyle = S.upg.register ? "#7ec4e6" : "#e9dccb"; ctx.fill(); ctx.lineWidth = 2; ctx.strokeStyle = "rgba(90,60,40,.25)"; ctx.stroke();
-    rr(ctx, kx - 18, ky - 16, 36, 18, 4); ctx.fillStyle = S.upg.register ? "#355c7d" : "#5f7f6b"; ctx.fill();
-    txt(ctx, S.mode === "day" ? "₺" : "--", kx, ky - 7, 11, "#d7ffd9", 700);
-    for (let i = 0; i < 3; i++) for (let j = 0; j < 2; j++) { rr(ctx, kx - 18 + i * 13, ky + 6 + j * 11, 10, 8, 2); ctx.fillStyle = "#fff"; ctx.fill(); }
-    if (S.upg.register) emo(ctx, "💳", kx + 40, ky + 20, 18);
-    if (S.upg.music) emo(ctx, "📻", 814, 318, 28);
+    rr(ctx, kx - 26, ky, 52, 34, 6); ctx.fillStyle = bad ? "#c9bfb2" : rlv ? "#7ec4e6" : "#e9dccb"; ctx.fill(); ctx.lineWidth = 2; ctx.strokeStyle = "rgba(90,60,40,.25)"; ctx.stroke();
+    rr(ctx, kx - 18, ky - 16, 36, 18, 4); ctx.fillStyle = bad ? "#1f2528" : rlv ? "#355c7d" : "#5f7f6b"; ctx.fill();
+    if (bad) { txt(ctx, "✕", kx, ky - 6.5, 13, "#ff6b57", 700); } else txt(ctx, S.mode === "day" ? "₺" : "--", kx, ky - 7, 11, "#d7ffd9", 700);
+    for (let i = 0; i < 3; i++) for (let j = 0; j < 2; j++) { rr(ctx, kx - 18 + i * 13, ky + 6 + j * 11, 10, 8, 2); ctx.fillStyle = bad ? "#d9d0c4" : "#fff"; ctx.fill(); }
+    if (wear && !bad) { ellipse(ctx, kx - 12, ky + 26, 6, 2.4, "rgba(168,98,44," + (0.2 + wear * 0.08) + ")"); ellipse(ctx, kx + 14, ky + 8, 4, 2, "rgba(168,98,44,.26)"); }
+    if (bad) { // arıza notu: kırmızı etiket
+      ctx.save(); ctx.translate(kx + 24, ky - 8); ctx.rotate(0.18); rr(ctx, -19, -8, 38, 16, 3); ctx.fillStyle = "#fffaf2"; ctx.fill(); ctx.lineWidth = 1.6; ctx.strokeStyle = C.red2; ctx.stroke();
+      txt(ctx, "ARIZA", 0, 0.5, 9.5, C.red2, 700); ctx.restore();
+    }
+    if (rlv >= 2) emo(ctx, "💳", kx + 40, ky + 20, 18);                         // temassız ödeme okuyucu (Sv2)
+    else if (rlv === 1) { rr(ctx, kx + 30, ky + 22, 14, 7, 3); ctx.fillStyle = "#4a4560"; ctx.fill(); rr(ctx, kx + 33, ky + 14, 5, 10, 2); ctx.fill(); circle(ctx, kx + 41, ky + 25.5, 1.4, "#ff5a4a"); }   // barkod okuyucu (Sv1)
+    if (S.upg.music) {
+      if (S.upg.music >= 2) { // Sv2: pikap
+        rr(ctx, 794, 322, 40, 14, 3); ctx.fillStyle = C.wood2; ctx.fill(); ellipse(ctx, 812, 324, 16, 4.6, "#2a2630"); ellipse(ctx, 812, 323.6, 5, 1.8, "#ff8fab");
+        ctx.strokeStyle = "#cfd6dd"; ctx.lineWidth = 1.6; ctx.beginPath(); ctx.moveTo(826, 318); ctx.lineTo(814, 323.4); ctx.stroke();
+      } else emo(ctx, "📻", 814, 318, 28);
+    }
     if (S.upg.tea) emo(ctx, "🫖", 690, 320, 24);
+    // borç defteri (borç > 0): tezgâhta kırmızı defter; ağır borçta bildirim kâğıtları
+    if (dl) {
+      ctx.save(); ctx.translate(762, 331); ctx.rotate(-0.06);
+      rr(ctx, -19, -12, 38, 14, 2); ctx.fillStyle = "#b8322a"; ctx.fill(); ctx.lineWidth = 1.4; ctx.strokeStyle = "#7f1f1a"; ctx.stroke();
+      ctx.fillStyle = "#fff6e6"; ctx.fillRect(-17, 1.6, 34, 2); rr(ctx, -12, -9, 20, 7, 2); ctx.fillStyle = "#fff6e6"; ctx.fill(); txt(ctx, "BORÇ", -2, -5.2, 6.5, "#7f1f1a", 700);
+      ctx.restore();
+    }
     // tezgâh gövdesi
     rr(ctx, c.x - 6, c.top, w + 12, 16, 6); ctx.fillStyle = C.wood; ctx.fill();
     ctx.fillStyle = C.woodL; ctx.fillRect(c.x - 2, c.top + 2, w + 4, 3);
@@ -966,6 +1209,23 @@
     for (let x = c.x + 10, i = 0; x < c.x1; x += 20, i++) { ctx.fillStyle = i % 2 ? C.cream2 : "#f27b5a"; ctx.fillRect(x, c.top + 26, 20, 60); }
     ctx.restore();
     ctx.fillStyle = "rgba(60,30,10,.16)"; ctx.fillRect(c.x + 2, 416, w - 4, 10);       // tekmelik
+    // sadakat kartı panosu (ön panelde)
+    if (S.upg.loyalty) {
+      const lv = S.upg.loyalty, x0 = c.x + 24, y0 = c.top + 38, ww = 108, hh = 36;
+      rr(ctx, x0 + 1, y0 + 3, ww, hh, 9); ctx.fillStyle = "rgba(60,30,10,.18)"; ctx.fill();
+      rr(ctx, x0, y0, ww, hh, 9); ctx.fillStyle = lv >= 2 ? "#ffe8a6" : "#ffe0ea"; ctx.fill(); ctx.lineWidth = 2; ctx.strokeStyle = lv >= 2 ? C.gold2 : "#e0607e"; ctx.stroke();
+      emo(ctx, "💳", x0 + 17, y0 + 18, 17);
+      txt(ctx, "SADAKAT", x0 + 66, y0 + 12, 11, lv >= 2 ? "#7a4e00" : "#9a2f4f", 700);
+      for (let i = 0; i < (lv >= 2 ? 5 : 3); i++) star4(ctx, x0 + 42 + i * 12.5 + (lv >= 2 ? 0 : 6), y0 + 26, 4.6, lv >= 2 ? C.gold : "#ff8fab");
+    }
+    if (dl >= 2) { // ağır borç: tezgâh önüne bildirim kâğıtları
+      for (let i = 0; i < 2; i++) { ctx.save(); ctx.translate(c.x + 140 + i * 15, c.top + 66 + i * 4); ctx.rotate(0.12 - i * 0.2); rr(ctx, -9, -12, 18, 24, 2); ctx.fillStyle = "#fffaf2"; ctx.fill(); ctx.lineWidth = 1.4; ctx.strokeStyle = C.red2; ctx.stroke(); txt(ctx, "!", 0, -3, 12, C.red2, 700); ctx.fillStyle = "rgba(198,61,29,.35)"; ctx.fillRect(-6, 5, 12, 1.6); ctx.restore(); }
+    }
+    if (bad) { // kasa bozukken tezgâh önünde "SADECE NAKİT" yerine çapraz bant: sorun burada
+      ctx.save(); rr(ctx, c.x + 10, c.top + 26, w - 20, 60, 6); ctx.clip(); ctx.translate(c.x + w / 2, c.top + 56); ctx.rotate(-0.06);
+      ctx.fillStyle = "rgba(255,207,51,.92)"; ctx.fillRect(-w / 2, -8, w, 16); ctx.fillStyle = "#2c2a30"; for (let i = -9; i < 9; i++) { ctx.beginPath(); ctx.moveTo(i * 16, -8); ctx.lineTo(i * 16 + 8, -8); ctx.lineTo(i * 16 + 1, 8); ctx.lineTo(i * 16 - 7, 8); ctx.closePath(); ctx.fill(); }
+      ctx.restore();
+    }
   }
   function paintTop(ctx) { // tente (en üstte)
     const sw = 40, top = 0, bot = 46;
@@ -990,6 +1250,7 @@
     // cam bölme: aynı gökyüzü katmanı
     ctx.save(); rr(ctx, d.x + 10 * k, d.y + 14, dw - 20 * k, 118, 6); ctx.clip();
     blit(ctx, S.L.skyD);
+    if (S.crisis && S.crisis.id === "kamyon") { const q = clamp((S.time - S.crisis.t0) / 1.4, 0, 1), e = 1 - Math.pow(1 - q, 3); emo(ctx, "🚚", lerp(d.x + d.w + 36, d.x + d.w * 0.5, e), d.y + 96 + (R || q < 1 ? 0 : Math.sin(S.time * 14) * 0.8), 46); }
     ctx.fillStyle = "rgba(255,255,255,.2)"; ctx.fillRect(d.x, d.y, d.w, 140);
     ctx.restore();
     ctx.strokeStyle = "rgba(113,71,42,.4)"; ctx.lineWidth = 3; rr(ctx, d.x + 10 * k, d.y + 14, dw - 20 * k, 118, 6); ctx.stroke();
@@ -1064,6 +1325,7 @@
     ctx.lineWidth = 1.6; ctx.beginPath(); ctx.moveTo(cx, cy); ctx.lineTo(cx + Math.cos(mang) * 12, cy + Math.sin(mang) * 12); ctx.stroke();
     circle(ctx, cx, cy, 2, C.red); ctx.lineCap = "butt";
     if (S.upg.camera) circle(ctx, 920, 64, 2.5, (t % 1.2) < .6 ? "#ff4d4d" : "#7a2a2a");
+    if ((S.upg.camera || 0) >= 2) circle(ctx, 888, 116, 2.6, (S.alert === "thief" || (t % 0.8) < .15) ? "#ff3b3b" : "#7a2a2a");
     // vantilatör (sıcakta hızlı)
     if (S.upg.fan) {
       const spd = R ? 0.6 : (S.mode === "day" ? (S.wkind === "hot" ? 14 : 9) : 1.5);
@@ -1086,7 +1348,7 @@
     }
   }
   function drawEventDecor(ctx) { // ön katman: flama / balon
-    const k = S.ekind; if (!k) return;
+    const k = S.ekind || (S.upg.grand ? "party" : null); if (!k) return;
     const flagSets = {
       match: ["#ffd23f", "#1d3557", "#ffd23f", "#e63946"], party: ["#ff9db6", "#ffd57e", "#9dcfe8", "#a4d9ba", "#d3bff6"],
       school: ["#9dcfe8", "#ffd57e", "#e85a65"], generic: ["#ffbfca", "#ffe496", "#acd9ee", "#c0e3b3", "#d3bff6"],
@@ -1129,13 +1391,15 @@
     if (!S.upg.helper) return;
     const h = S.helper, y = 468, bob = S.reduce ? 0 : Math.abs(Math.sin(S.time * 7)) * (Math.abs(h.tx - h.x) > 2 ? 3 : 0);
     shadow(ctx, h.x, y + 26, 20);
+    const hl = clamp(S.upg.helper || 1, 1, 3), vest = ["#e3502c", "#3b8ed0", "#d99a1e"][hl - 1], cap = ["#e3502c", "#3b8ed0", "#f2b134"][hl - 1], cap2 = ["#c63d1d", "#2c6ea3", "#c98a16"][hl - 1];
     ellipse(ctx, h.x, y - bob, 20, 22, "#a0d8ef");
-    ctx.save(); ctx.beginPath(); ctx.ellipse(h.x, y - bob, 20, 22, 0, 0, Math.PI * 2); ctx.clip(); ctx.fillStyle = C.red; ctx.fillRect(h.x - 13, y - bob + 4, 26, 22); ctx.restore();
-    // şapka
-    ctx.fillStyle = C.red; ctx.beginPath(); ctx.ellipse(h.x, y - bob - 17, 15, 8, 0, Math.PI, 0); ctx.fill(); rr(ctx, h.x - 17, y - bob - 18, 34, 5, 2); ctx.fillStyle = C.red2; ctx.fill();
+    ctx.save(); ctx.beginPath(); ctx.ellipse(h.x, y - bob, 20, 22, 0, 0, Math.PI * 2); ctx.clip(); ctx.fillStyle = vest; ctx.fillRect(h.x - 13, y - bob + 4, 26, 22); ctx.restore();
+    // şapka (Sv1 kırmızı, Sv2 mavi, Sv3 altın kıdemli)
+    ctx.fillStyle = cap; ctx.beginPath(); ctx.ellipse(h.x, y - bob - 17, 15, 8, 0, Math.PI, 0); ctx.fill(); rr(ctx, h.x - 17, y - bob - 18, 34, 5, 2); ctx.fillStyle = cap2; ctx.fill();
+    if (hl >= 3) star4(ctx, h.x, y - bob - 25, 5, "#fff");
     circle(ctx, h.x - 6, y - bob - 6, 2.6, C.ink); circle(ctx, h.x + 6, y - bob - 6, 2.6, C.ink);
     ctx.strokeStyle = C.ink; ctx.lineWidth = 1.6; ctx.beginPath(); ctx.arc(h.x, y - bob - 1, 4, 0.3, Math.PI - 0.3); ctx.stroke();
-    emo(ctx, "📦", h.x + 18, y - bob + 2, 16);
+    emo(ctx, "📦", h.x + 18, y - bob + 2, hl >= 2 ? 19 : 16); if (hl >= 3) emo(ctx, "📦", h.x + 24, y - bob - 12, 15);
     // isim etiketi
     rr(ctx, h.x - 12, y - bob + 8, 24, 11, 5); ctx.fillStyle = "#fffaf2"; ctx.fill(); txt(ctx, "Ali", h.x, y - bob + 14, 8.5, C.ink, 700);
   }
@@ -1157,10 +1421,10 @@
     const breath = S.reduce ? 0 : Math.sin(S.time * 2) * 1.2;
     ellipse(ctx, x, y + 6, 34, 36 + breath, "#ffd9b8");
     ctx.save(); ctx.beginPath(); ctx.ellipse(x, y + 6, 34, 36 + breath, 0, 0, Math.PI * 2); ctx.clip();
-    ctx.fillStyle = (S.upg.apron || 0) >= 2 ? "#3b8ed0" : C.red; ctx.fillRect(x - 22, y + 14, 44, 40); ctx.fillStyle = "#fff"; ctx.fillRect(x - 22, y + 14, 44, 4);
+    ctx.fillStyle = ["#e3502c", "#e3502c", "#3b8ed0", "#d99a1e"][Math.min(3, S.upg.apron || 0)]; ctx.fillRect(x - 22, y + 14, 44, 40); ctx.fillStyle = "#fff"; ctx.fillRect(x - 22, y + 14, 44, 4);
     ctx.restore();
     ctx.strokeStyle = "rgba(90,60,40,.28)"; ctx.lineWidth = 2; ctx.beginPath(); ctx.ellipse(x, y + 6, 34, 36 + breath, 0, 0, Math.PI * 2); ctx.stroke();
-    if (S.upg.apron) { circle(ctx, x + 12, y + 26, 5.5, C.gold); txt(ctx, "★", x + 12, y + 26.5, 8, "#fff", 700); }
+    if (S.upg.apron) { circle(ctx, x + 12, y + 26, 5.5, C.gold); txt(ctx, "★", x + 12, y + 26.5, 8, "#fff", 700); if (S.upg.apron >= 3 && !S.reduce) { ctx.save(); ctx.globalAlpha = .4 + Math.sin(S.time * 3) * .4; star4(ctx, x - 12, y + 24, 4, "#fff"); ctx.restore(); } }
     ctx.fillStyle = C.red; ctx.beginPath(); ctx.ellipse(x, y - 24, 24, 10, 0, Math.PI, 0); ctx.fill();
     rr(ctx, x - 26, y - 26, 52, 7, 3); ctx.fillStyle = C.red2; ctx.fill();
     circle(ctx, x, y - 36, 3.5, "#fff");
@@ -1287,7 +1551,7 @@
     const x = c.x, base = c.y, y = base - d.ry - 6 - bob - hop;
     ctx.save(); ctx.globalAlpha = clamp(c.alpha, 0, 1);
     shadow(ctx, x, base + 2, d.rx * 0.9);
-    if (walking && !R) { ctx.translate(x, base); ctx.rotate(c.dir * 0.06); ctx.translate(-x, -base); }   // yürürken hafif ileri eğilme
+    if ((walking || c.sneak) && !R) { ctx.translate(x, base); ctx.rotate(c.sneak ? Math.sin(t * 6) * 0.08 : c.dir * 0.06); ctx.translate(-x, -base); }   // yürürken hafif ileri eğilme; hırsız sinsice sallanır
     // ayaklar
     const st = walking && !R ? Math.sin(ph) * 4 : 0, fo = 8 * d.fs;
     ellipse(ctx, x - fo + st, base - 3 - hop * 0.5, 7 * d.fs, 5, "#5a4636"); ellipse(ctx, x + fo - st, base - 3 - hop * 0.5, 7 * d.fs, 5, "#5a4636");
@@ -1309,7 +1573,7 @@
       else {
         circle(ctx, fx - eyeX, fy - 2, 3 * fs + .3, C.ink); circle(ctx, fx + eyeX, fy - 2, 3 * fs + .3, C.ink);
         circle(ctx, fx - eyeX + .8, fy - 3.2, 1, "#fff"); circle(ctx, fx + eyeX + .8, fy - 3.2, 1, "#fff");
-        if (S.ekind === "dark" && S.mode === "day") { circle(ctx, fx - eyeX + 1.6, fy - 1, 1, "rgba(255,255,255,.9)"); circle(ctx, fx + eyeX + 1.6, fy - 1, 1, "rgba(255,255,255,.9)"); }
+        if (isDark()) { circle(ctx, fx - eyeX + 1.6, fy - 1, 1, "rgba(255,255,255,.9)"); circle(ctx, fx + eyeX + 1.6, fy - 1, 1, "rgba(255,255,255,.9)"); }
       }
       circle(ctx, fx - 12 * fs, fy + 4, 3.6 * fs + .4, "rgba(255,120,140,.35)"); circle(ctx, fx + 12 * fs, fy + 4, 3.6 * fs + .4, "rgba(255,120,140,.35)");
       ctx.strokeStyle = C.ink; ctx.lineWidth = 1.8; ctx.beginPath();
@@ -1323,7 +1587,8 @@
     }
     // aksesuar
     const top = y - ry;
-    if (!lk.regular) switch (lk.acc) {
+    if (lk.extra) drawExtra(ctx, c, x, y, rx, ry, top, fx, fy, eyeX, fs);
+    else if (!lk.regular) switch (lk.acc) {
       case 0: ctx.fillStyle = "#e36a6a"; ctx.beginPath(); ctx.ellipse(x, top + 4, rx * .8, 7, 0, Math.PI, 0); ctx.fill(); rr(ctx, x - 2, top + 1, rx + 6, 5, 2); ctx.fill(); break; // şapka
       case 1: tri(ctx, x + 4, top + 3, x + 16, top - 5, x + 16, top + 9, "#ff7aa2"); tri(ctx, x + 4, top + 3, x - 8, top - 5, x - 8, top + 9, "#ff7aa2"); circle(ctx, x + 4, top + 3, 3, "#ff4f86"); break; // fiyonk
       case 2: ctx.strokeStyle = C.ink; ctx.lineWidth = 1.6; ctx.beginPath(); ctx.arc(fx - eyeX, fy - 2, 6 * fs, 0, Math.PI * 2); ctx.moveTo(fx + eyeX + 6 * fs, fy - 2); ctx.arc(fx + eyeX, fy - 2, 6 * fs, 0, Math.PI * 2); ctx.moveTo(fx - eyeX + 6 * fs, fy - 2); ctx.lineTo(fx + eyeX - 6 * fs, fy - 2); ctx.stroke(); break; // gözlük
@@ -1335,7 +1600,7 @@
         ctx.strokeStyle = "#4d4a63"; ctx.lineWidth = 3; ctx.beginPath(); ctx.ellipse(x, y, rx * 1.02, ry * 1.02, 0, Math.PI * 1.1, Math.PI * 1.9); ctx.stroke();
         circle(ctx, x - rx * 1.0, y - 3, 5, "#6d6a8a"); circle(ctx, x + rx * 1.0, y - 3, 5, "#6d6a8a");
     }
-    if (S.wkind === "snow" && !lk.regular) { // atkı + bere
+    if (S.wkind === "snow" && !lk.regular && !lk.extra) { // atkı + bere
       if (lk.tone === 0 && lk.acc !== 3) { ctx.fillStyle = "#c63d1d"; ctx.beginPath(); ctx.arc(x, top + 8, rx * .76, Math.PI, 0); ctx.fill(); circle(ctx, x, top - 3, 4.5, "#fff"); }
       ctx.strokeStyle = lk.tone === 1 ? "#3b8ed0" : "#e3502c"; ctx.lineWidth = 6; ctx.lineCap = "round"; ctx.beginPath(); ctx.ellipse(x, y + ry * .55, rx * .7, 4, 0, 0.1, Math.PI - 0.1); ctx.stroke();
       rr(ctx, x + rx * .35, y + ry * .55, 7, 14, 3); ctx.fillStyle = lk.tone === 1 ? "#3b8ed0" : "#e3502c"; ctx.fill(); ctx.lineCap = "butt";
@@ -1366,8 +1631,9 @@
       circle(ctx, x + 6, top - 4, 3, "#fff"); rr(ctx, bx - 16, by - 15, 32, 28, 12); ctx.fillStyle = "#fff"; ctx.fill();
       ctx.strokeStyle = "rgba(90,60,40,.18)"; ctx.lineWidth = 1.5; ctx.stroke(); emo(ctx, c.think, bx, by - 1, 17);
     }
+    if (c.mad > 0 && !sad) emo(ctx, "💢", x + rx * .7, top - 6 - (R ? 0 : Math.abs(Math.sin(t * 9)) * 3), 17);
     // üzgün bulut
-    if (sad) {
+    if (sad && !c.mad) {
       const cy = top - 26, a = clamp(c.sad, 0, 1);
       ctx.globalAlpha *= a;
       circle(ctx, x - 9, cy, 9, "#9fb0c4"); circle(ctx, x + 3, cy - 5, 11, "#9fb0c4"); circle(ctx, x + 13, cy, 8, "#9fb0c4"); ellipse(ctx, x + 2, cy + 4, 20, 6, "#9fb0c4");
@@ -1385,6 +1651,366 @@
         const tw = c.nameW || (c.nameW = ctx.measureText(nm).width + 12);
         rr(ctx, x - tw / 2, base + 8, tw, 15, 7.5); ctx.fillStyle = "rgba(255,250,242,.96)"; ctx.fill(); ctx.lineWidth = 1.5; ctx.strokeStyle = C.edge; ctx.stroke();
         txt(ctx, nm, x, base + 15.8, 11, C.ink, 700); ctx.restore();
+      }
+    }
+  }
+
+  // ---------- mekanik görselleri: hırsız, arıza, kriz, salvo, kepenk ----------
+  const isDark = () => (S.ekind === "dark" && S.mode === "day") || S.blackout > 0;
+
+  // sahne figürü: gerçek müşteri olmayan, olayla gelen kişiler (hırsız, satıcı, VIP, kalabalık…)
+  function addProp(cid, ov, x, y, tx, ty, delay) {
+    const lk = Object.assign(lookOf({}, cid), ov || {});
+    const c = { cid, look: lk, x, y, homeY: y, alpha: delay ? -delay * 3 : 0, q: [], cur: null, carried: [], amount: 0, happy: null, walkT: 0, dir: -1, idle: 0,
+      think: null, sad: 0, hop: 0, gone: false, heart: 0, moving: false, wet: 0, stepD: 0, paySlot: -1, spot: null, prop: true, mad: 0, spd: 1, caught: false, sneak: false };
+    if (S.customers.length > 15) { const oi = S.customers.findIndex(q => !q.prop); if (oi >= 0) { const old = S.customers.splice(oi, 1)[0]; delete S.cidMap[old.cid]; freePay(old); } }
+    if (delay) c.q.push({ k: "wait", d: delay });
+    if (tx != null) c.q.push({ k: "walk", x: tx, y: ty });
+    S.customers.push(c); S.cidMap[cid] = c; S.doorOpen = Math.max(S.doorOpen, 0.7);
+    return c;
+  }
+  function propLeave(c, glad) {
+    if (!c || c.gone) return;
+    c.prop = false; c.leaving = false; c.q = [{ k: "leave" }]; c.cur = null; c.think = null; c.caught = false; c.sneak = false;
+    if (glad === false) { c.happy = false; c.mad = 1.6; }
+  }
+  // kapı önü kalabalığı (salvo / kalabalık krizi)
+  function crowd(n, prefix, stay) {
+    const out = [], slots = S.slots;
+    for (let i = 0; i < n; i++) {
+      const tx = 756 + (i % 3) * 34 + (((i / 3) | 0) % 2) * 15, ty = 474 + ((i / 3) | 0) * 15;
+      const c = addProp(prefix + i, { color: BLOB_COLORS[(i * 3 + 1) % BLOB_COLORS.length] }, L.door.x + 46, 480 + (i % 2) * 8, tx, ty, i * 0.28);
+      if (slots.length) c.think = productEmoji(slots[(i * 5 + 1) % slots.length].p.id);
+      if (!stay) c.q.push({ k: "wait", d: 5.5 }, { k: "leave" });
+      out.push(c);
+    }
+    return out;
+  }
+
+  // ---- hırsız ----
+  function thiefStart(b) {
+    if (S.thief && !S.thief.gone) return;
+    const sl = slotFor(b.productId), sx = clamp(sl ? sl.x : 400, 250, 560);
+    const c = addProp("thief" + b.id, { color: "#3f3b55", extra: "thief", body: "round", size: 27 }, L.door.x + 46, 487, sx, 488);
+    c.q.push({ k: "sneak" }); c.thief = true; c.bid = b.id; c.pid = b.productId; c.spd = 1.15;
+    S.thief = c;
+  }
+  function ensureThief(pid) {
+    let c = S.thief;
+    if (!c || c.gone) {
+      const sl = slotFor(pid), sx = clamp(sl ? sl.x : 400, 250, 560);
+      c = addProp("thieff" + Math.floor(S.time * 10), { color: "#3f3b55", extra: "thief", body: "round", size: 27 }, sx, 488); c.alpha = 1; c.thief = true;
+      S.thief = c;
+    }
+    return c;
+  }
+  function thiefTheft(ev) {
+    const c = ensureThief(ev.productId), sl = slotFor(ev.productId), n = clamp(ev.qty || 1, 1, 3), em = ev.emoji || productEmoji(ev.productId);
+    for (let i = 0; i < n; i++) { spawnFly(em, (sl ? sl.x : c.x) + (i - 1) * 9, (sl ? sl.y : 400) - 16, c.x, c.y - 46, i * 0.1); c.carried.push(em); }
+    c.q = [{ k: "wait", d: 0.3 }, { k: "leave" }]; c.cur = null; c.spd = 2.4; c.sneak = false; c.dir = 1;
+    floaty("−" + (ev.qty || n) + " " + em + " çalındı!", sl ? sl.x : c.x, (sl ? sl.y : 400) - 58, C.red3, 19);
+    S.redT = 1.3; S.thief = null;
+    sfx("alarm");
+  }
+  function thiefCaught(ev) {
+    const c = S.thief && !S.thief.gone ? S.thief : null;
+    if (ev.auto) { S.flashT = 0.55; S.flashAt = S.upg.camera ? { x: 930, y: 70 } : null; sfx("shutter"); }
+    if (c) {
+      c.q = [{ k: "caught", d: 1.8 }, { k: "leave" }]; c.cur = null; c.spd = 0.55; c.carried = []; c.sneak = false;
+      for (let i = 0; i < (S.reduce ? 2 : 7); i++) pushPart({ k: "star", x: c.x + (Math.random() - .5) * 40, y: c.y - 60 + (Math.random() - .5) * 20, vx: (Math.random() - .5) * 90, vy: -50 - Math.random() * 50, g: 120, life: .9, max: .9, r: 5 + Math.random() * 3 });
+      floaty(ev.auto ? "📹 Kamera yakaladı!" : "YAKALANDI!", c.x, c.y - 96, C.green3, 21);
+    }
+    S.keeper.wave = 1; S.keeper.hop = 1; if (!ev.auto) { S.cat.alert = 0; S.cat.st = "sit"; S.cat.t = 3; }
+    S.thief = null;
+    sfx("catch");
+  }
+  function thiefExpire(id) {
+    const c = S.thief;
+    if (c && !c.gone && c.bid === id) { c.q = [{ k: "leave" }]; c.cur = null; c.spd = 2; S.thief = null; floaty("Eli boş kaçtı", c.x, c.y - 78, C.ink2, 15); }
+  }
+
+  // ---- ekipman arızası / onarımı ----
+  const EQ_AT = { fridge: () => ({ x: L.fridge.x + L.fridge.w / 2, y: L.fridge.y + 120 }), register: () => ({ x: REG.x, y: REG.y - 4 }) };
+  function breakdownFx(eq) {
+    const p = (EQ_AT[eq] || EQ_AT.register)();
+    S.warn[eq] = 0; S.blastT = 0.4; S.blastAt = p;
+    for (let i = 0; i < (S.reduce ? 3 : 12); i++) sparkAt(p.x + (Math.random() - .5) * 40, p.y - 20 + (Math.random() - .5) * 30);
+    floaty("ARIZA!", p.x, p.y - 62, C.red3, 21);
+    emoPart("💥", p.x, p.y - 20, 30);
+    sfx("zap");
+  }
+  function repairFx(eq) {
+    S.warn[eq] = 0;
+    S.repairs.push({ eq, t: 0 });
+    sfx("repair");
+  }
+  function sparkAt(x, y) { pushPart({ k: "spark2", x, y, vx: (Math.random() - .5) * 150, vy: -40 - Math.random() * 110, g: 340, life: .38 + Math.random() * .25, max: .6 }); }
+  function smokeAt(x, y, dark) { pushPart({ k: "smoke", x, y, vx: (Math.random() - .5) * 14, vy: -22 - Math.random() * 14, life: 1.5, max: 1.5, r: 4 + Math.random() * 3, dark: !!dark }); }
+  function emoPart(e, x, y, size) { pushPart({ k: "emo", e, x, y, vx: 0, vy: -26, life: .9, max: .9, size: size || 22 }); }
+
+  // ---- kriz sahneleri ----
+  function crisisClear() { if (S.crisis) S.crisis.props.forEach(c => propLeave(c, true)); S.crisis = null; }
+  function crisisStart(cr) {
+    crisisClear();
+    S.crisis = { id: cr.id, emoji: cr.emoji, t0: S.time, props: [] };
+    const P = S.crisis.props, door = L.door.x + 46;
+    switch (cr.id) {
+      case "kamyon": sfx("horn"); break;
+      case "elektrik": S.blackout = Infinity; sfx("zap"); break;
+      case "kalabalik": crowd(6, "ck", true).forEach(c => P.push(c)); sfx("salvo"); break;
+      case "pazarlik": { const c = addProp("cpz", { color: "#8a6a4a", extra: "salesman", size: 27 }, door, 488, 430, 490); c.think = "🎲"; P.push(c); break; }
+      case "veresiye": { const c = addProp("cvr", { color: "#d9d2c6", extra: "elder", size: 26 }, door, 486, 690, 492); c.think = "📒"; P.push(c); break; }
+      case "vip": { const c = addProp("cvip", { color: "#2b2d42", extra: "vip", size: 28, body: "tall" }, door, 490, 770, 492); c.think = "💎"; P.push(c); sfx("bell"); break; }
+      case "siparis": { const c = addProp("csp", { color: "#ffb3a0", size: 27 }, door, 488, 760, 492); c.think = "📦"; c.mad = 99; P.push(c); break; }
+      case "rakipanons": sfx("horn"); break;
+      default: break;
+    }
+  }
+  function crisisResolveFx(ev) {
+    const cr = S.crisis, glad = ev.choice !== "ignore";
+    const at = { x: L.door.x + 40, y: 330 };
+    if (cr) cr.props.forEach(c => propLeave(c, glad));
+    if (ev.id === "elektrik") {
+      if (ev.choice === "jenerator") { S.blackout = 0.7; S.gen = 8; sfx("rumble"); } else S.blackout = ev.choice === "mum" ? 9 : 6;
+    }
+    S.crisis = null; S.crisisEnd = S.time + 1.2;
+    floaty((glad ? "✔ " : "✖ ") + (ev.label || ""), at.x - 20, at.y, glad ? C.green3 : C.red3, 17);
+    if (glad) { sparkles(at.x, at.y + 30, 6); sfx("coin"); } else { emoPart("💨", at.x, at.y + 30, 24); }
+  }
+
+  // ---- her karede çalışan yan etkiler (parçacık yayıcılar, sayaçlar, uyarı durumu) ----
+  function updateFx(dt) {
+    readEq();
+    S.debtT -= dt; if (S.debtT <= 0) { S.debtT = 0.6; S.debtLv = debtLevel(); }
+    if (isFinite(S.blackout) && S.blackout > 0) S.blackout = Math.max(0, S.blackout - dt);
+    S.salvoT = Math.max(0, S.salvoT - dt); S.flashT = Math.max(0, S.flashT - dt); S.blastT = Math.max(0, S.blastT - dt); S.redT = Math.max(0, S.redT - dt); S.gen = Math.max(0, S.gen - dt);
+    const T = S.fxT, R = S.reduce, f = L.fridge, day = S.mode === "day";
+    // arızalı dolap: kıvılcım + buz damlası; arıza uyarısı (baloncuk açıkken) hafif kıvılcım
+    const fl = (S.brk.fridge && S.upg.fridge) ? 1 : S.warn.fridge ? 0.4 : 0;
+    if (fl && !R) {
+      T.spark -= dt; if (T.spark <= 0) { T.spark = (0.2 + Math.random() * 0.5) / fl; sparkAt(f.x + 22 + Math.random() * 44, f.y + 24 + Math.random() * 16); }
+      if (S.brk.fridge) { T.drip -= dt; if (T.drip <= 0) { T.drip = 0.4 + Math.random() * 0.5; pushPart({ k: "drip", x: f.x + 10 + Math.random() * 66, y: f.y + f.h - 4, vx: 0, vy: 20, g: 520, life: .45, max: .45 }); } }
+    }
+    const rl = S.brk.register ? 1 : S.warn.register ? 0.4 : 0;
+    if (rl && !R && (day || S.mode === "idle")) {
+      T.smoke -= dt; if (T.smoke <= 0) { T.smoke = 0.26 / rl; smokeAt(REG.x - 8 + Math.random() * 16, REG.y - 18, true); if (Math.random() < 0.3 * rl) sparkAt(REG.x + (Math.random() - .5) * 26, REG.y - 12); }
+    }
+    if (S.gen > 0 && !R) { T.rival -= dt; if (T.rival <= 0) { T.rival = 0.18; smokeAt(L.door.x - 8, 470, true); } }
+    // uyarı rengi + #app[data-alert]
+    let a = "";
+    if (S.mode === "day") { if (S.crisis) a = "crisis"; else if (S.thief && !S.thief.gone) a = "thief"; else if (S.brk.fridge || S.brk.register) a = "break"; else if (S.salvoT > 0) a = "salvo"; }
+    if (a !== S.alert) { S.alert = a; try { if (!S.appEl) S.appEl = document.getElementById("app"); if (S.appEl) { if (a) S.appEl.dataset.alert = a; else delete S.appEl.dataset.alert; } } catch (e) { /* yok say */ } }
+    // kepenk (iflas)
+    const st = curState(), want = st && st.bankrupt && S.mode === "idle" ? 1 : 0;
+    if (S.shut < want) {
+      if (!S.shutSnd) { S.shutSnd = true; sfx("bankrupt"); }
+      S.shut = Math.min(want, S.shut + dt * 0.65);
+    } else if (S.shut > want) { S.shut = Math.max(want, S.shut - dt * 3); if (!want) S.shutSnd = false; }
+    // onarım animasyonları
+    for (const r of S.repairs) r.t += dt;
+    S.repairs = S.repairs.filter(r => r.t < 1.5);
+  }
+
+  // ---- çizim yardımcıları ----
+  function speech(ctx, x, y, text, size, fg, bg, edge, tailX) {
+    ctx.font = "700 " + size + "px " + FONT_T; const w = ctx.measureText(text).width + 16, h = size + 12;
+    ctx.save(); rr(ctx, x - w / 2, y - h / 2, w, h, 9); ctx.fillStyle = bg; ctx.fill(); ctx.lineWidth = 2; ctx.strokeStyle = edge; ctx.stroke();
+    tri(ctx, (tailX == null ? x : tailX) - 5, y + h / 2 - 1, (tailX == null ? x : tailX) + 5, y + h / 2 - 1, (tailX == null ? x : tailX), y + h / 2 + 7, bg, edge, 2);
+    rr(ctx, (tailX == null ? x : tailX) - 4, y + h / 2 - 3, 8, 4, 1); ctx.fillStyle = bg; ctx.fill();
+    txt(ctx, text, x, y + 0.5, size, fg, 700); ctx.restore();
+  }
+  function vigSprite(rgb) {
+    const v = S.view, vw = v.x1 - v.x0;
+    return sprite("vig|" + rgb + "|" + vw, vw, H, c => {
+      const g = c.createRadialGradient(vw / 2, H / 2, vw * 0.34, vw / 2, H / 2, vw * 0.62);
+      g.addColorStop(0, "rgba(" + rgb + ",0)"); g.addColorStop(1, "rgba(" + rgb + ",.85)");
+      c.fillStyle = g; c.fillRect(0, 0, vw, H);
+    });
+  }
+  const ALERT_RGB = { crisis: "255,176,40", thief: "190,40,90", break: "255,120,40", salvo: "255,170,40" };
+  function drawAlertVignette(ctx) {
+    if (S.mode !== "day") return;
+    let kind = S.alert, urgent = false;
+    if (kind === "crisis") { try { const g = G(), cr = g && g.run && g.run.crisis; urgent = !!(cr && cr.deadline - g.run.t < 3); } catch (e) { urgent = false; } }
+    if (S.redT > 0) kind = "thief";
+    if (!kind) return;
+    const rgb = urgent ? "235,60,40" : ALERT_RGB[kind], sp = urgent ? 9 : 3.6;
+    const a = S.reduce ? 0.4 : 0.26 + Math.sin(S.time * sp) * 0.12 + (S.redT > 0 ? 0.1 : 0);
+    const s = vigSprite(rgb), v = S.view; ctx.save(); ctx.globalAlpha = clamp(a, 0, 1); drawSprite(ctx, s, (v.x0 + v.x1) / 2, H / 2); ctx.restore();
+  }
+  function drawFlash(ctx) {
+    if (S.flashT <= 0 && S.blastT <= 0) return;
+    const v = S.view;
+    if (S.flashT > 0) { // kamera flaşı
+      ctx.save(); ctx.globalAlpha = clamp(S.flashT * 1.4, 0, 0.7); ctx.fillStyle = "#fff"; ctx.fillRect(v.x0, 0, v.x1 - v.x0, H); ctx.restore();
+      if (S.flashAt) { ctx.save(); ctx.globalAlpha = clamp(S.flashT * 3, 0, 1); star4(ctx, S.flashAt.x, S.flashAt.y, 26 + (0.55 - S.flashT) * 30, "#fff"); ctx.restore(); }
+    }
+    if (S.blastT > 0 && S.blastAt) { // arıza parlaması
+      const q = S.blastT / 0.4; ctx.save(); ctx.globalAlpha = q * 0.8; const g = ctx.createRadialGradient(S.blastAt.x, S.blastAt.y, 2, S.blastAt.x, S.blastAt.y, 70 - q * 20);
+      g.addColorStop(0, "rgba(255,255,255,.95)"); g.addColorStop(1, "rgba(255,200,80,0)"); ctx.fillStyle = g; ctx.fillRect(S.blastAt.x - 80, S.blastAt.y - 80, 160, 160); ctx.restore();
+    }
+  }
+
+  // zemin/duvar seviyesi mekanik efektleri (müşterilerin arkasında)
+  function drawFxBack(ctx) {
+    const t = S.time, R = S.reduce, f = L.fridge;
+    if (S.upg.fridge) {
+      if (S.brk.fridge) {
+        ctx.fillStyle = "rgba(20,36,56,.2)"; rr(ctx, f.x, f.y, f.w, f.h, 14); ctx.fill();
+        const fl = R ? 0 : (Math.sin(t * 23) * Math.sin(t * 7.3) > 0.78 ? 0.3 : 0);
+        if (fl) { ctx.fillStyle = "rgba(255,255,255," + fl + ")"; rr(ctx, f.x, f.y, f.w, f.h, 14); ctx.fill(); }
+        if (R) { star4(ctx, f.x + 44, f.y + 34, 9, "#ffe27a"); }
+        const dh = S.warn.fridge; void dh;
+      } else if (wearOf(S.eqc.fridge) >= 2 && !R && (t % 4.2) < 0.12) { ctx.fillStyle = "rgba(255,255,255,.22)"; rr(ctx, f.x + 6, f.y + 20, f.w - 12, f.h - 36, 8); ctx.fill(); }
+    }
+    if (S.brk.register) {
+      if (!R && (t % 1.1) < 0.55) { const g = ctx.createRadialGradient(REG.x, REG.y - 7, 1, REG.x, REG.y - 7, 24); g.addColorStop(0, "rgba(255,70,50,.55)"); g.addColorStop(1, "rgba(255,70,50,0)"); ctx.fillStyle = g; ctx.fillRect(REG.x - 26, REG.y - 31, 52, 48); }
+      if (R) { circle(ctx, REG.x - 6, REG.y - 24, 5, "rgba(90,90,100,.5)"); circle(ctx, REG.x + 3, REG.y - 33, 7, "rgba(90,90,100,.38)"); }
+    }
+    // bozulacak raflar: sinekler + hoş olmayan koku çizgileri
+    if (S.spoilSlots.length) {
+      for (const sp of S.spoilSlots.slice(0, 6)) {
+        if (!R) {
+          ctx.strokeStyle = "rgba(122,150,50,.65)"; ctx.lineWidth = 1.6;
+          for (let i = 0; i < 3; i++) { const ph = (t * 0.7 + i / 3) % 1, bx = sp.x - 12 + i * 12; ctx.globalAlpha = Math.sin(ph * Math.PI) * 0.8; ctx.beginPath(); ctx.moveTo(bx, sp.y - 12 - ph * 16); ctx.quadraticCurveTo(bx + 4, sp.y - 18 - ph * 16, bx, sp.y - 24 - ph * 16); ctx.stroke(); }
+          ctx.globalAlpha = 1;
+          for (let i = 0; i < 2; i++) { const a = t * (3.2 + i) + i * 3; const fx = sp.x + Math.cos(a) * 15, fy = sp.y - 18 + Math.sin(a * 1.7) * 8; circle(ctx, fx, fy, 1.6, "#2b2b2b"); ctx.fillStyle = "rgba(255,255,255,.7)"; ctx.fillRect(fx - 2.4, fy - 2.4, 2.4, 1.2); }
+        }
+      }
+    }
+    // hırsız: hedef raf vurgusu
+    const th = S.thief;
+    if (th && !th.gone) {
+      const sl = slotFor(th.pid);
+      if (sl) { ctx.save(); ctx.setLineDash([5, 4]); ctx.lineWidth = 2.4; ctx.strokeStyle = "rgba(190,40,90," + (R ? 0.8 : 0.5 + Math.sin(t * 8) * 0.35).toFixed(2) + ")"; rr(ctx, sl.x - sl.w / 2 + 3, sl.y - 54, sl.w - 6, 74, 9); ctx.stroke(); ctx.restore(); }
+    }
+    crisisBack(ctx);
+    // jeneratör (elektrik krizi: jeneratör kiralandı)
+    if (S.gen > 0) {
+      const gx = L.door.x - 28, gy = 478;
+      contactShadow(ctx, gx, gy + 12, 42); rr(ctx, gx - 18, gy - 10, 36, 22, 4); ctx.fillStyle = "#e9a43a"; ctx.fill(); ctx.lineWidth = 2; ctx.strokeStyle = "#a96d12"; ctx.stroke();
+      rr(ctx, gx - 12, gy - 6, 14, 8, 2); ctx.fillStyle = "#2b2f33"; ctx.fill(); circle(ctx, gx + 9, gy - 2, 3, "#6fe38f"); emo(ctx, "⚡", gx + 1, gy + 5, 10);
+    }
+  }
+  function crisisBack(ctx) {
+    const c = S.crisis; if (!c) return;
+    const t = S.time - c.t0, R = S.reduce;
+    switch (c.id) {
+      case "sizinti": { // dolap altında büyüyen su birikintisi + ıslak zemin levhası
+        const f = L.fridge, q = Math.min(1, t / 5), rx = 26 + q * 62, cx = f.x + f.w / 2 + 6;
+        ellipse(ctx, cx, 440, rx, 5 + q * 8, "rgba(105,170,225,.5)"); ellipse(ctx, cx - rx * .2, 438, rx * .55, 2.4 + q * 3, "rgba(255,255,255,.35)");
+        if (!R) for (let i = 0; i < 3; i++) { const ph = (t * 1.1 + i / 3) % 1; ctx.fillStyle = "rgba(120,180,235,.8)"; ctx.beginPath(); ctx.ellipse(f.x + 20 + i * 24, f.y + f.h - 4 + ph * 18, 2, 3.2, 0, 0, Math.PI * 2); ctx.fill(); }
+        tri(ctx, f.x - 22, 482, f.x - 2, 482, f.x - 12, 456, "#ffcf33", "#2c2a30", 2); txt(ctx, "!", f.x - 12, 476, 12, "#2c2a30", 700);
+        break;
+      }
+      case "baskin": { // tavandan su: 3 damlama noktası, büyüyen gölcükler, kova
+        [[300, 0], [470, .33], [640, .66]].forEach(([x, off], i) => {
+          ctx.fillStyle = "rgba(90,120,160,.3)"; ctx.beginPath(); ctx.ellipse(x, 92, 22, 6, 0, 0, Math.PI * 2); ctx.fill();
+          const ph = ((t * 0.9 + off) % 1), dy = 96 + ph * ph * 340;
+          if (!R || i === 0) { ctx.fillStyle = "rgba(125,185,240,.9)"; ctx.beginPath(); ctx.ellipse(x, dy, 2.3, 3.6, 0, 0, Math.PI * 2); ctx.fill(); }
+          const q = Math.min(1, t / 6); ellipse(ctx, x, 462 + i * 6, 14 + q * 24, 3 + q * 4, "rgba(105,170,225,.5)");
+        });
+        emo(ctx, "🪣", 640, 458, 26);
+        break;
+      }
+      case "kamyon": if (t > 1.4) { emo(ctx, "📦", 806, 452, 30); emo(ctx, "📦", 826, 456, 28); emo(ctx, "📦", 816, 430, 26); } break;
+      case "siparis": emo(ctx, "📦", 792, 474, 32); break;
+      default: break;
+    }
+  }
+  // varlıkların üstünde: konuşma baloncukları, ses dalgaları, tamir anahtarı, spot
+  function drawFxFront(ctx) {
+    const t = S.time, R = S.reduce, c = S.crisis;
+    if (c) {
+      const q = t - c.t0;
+      if (c.id === "rakipanons") {
+        ctx.save(); ctx.strokeStyle = "rgba(198,61,29,.75)"; ctx.lineWidth = 3; ctx.lineCap = "round";
+        for (let i = 0; i < 3; i++) { const ph = R ? 0.5 : ((q * 0.9 + i / 3) % 1); ctx.globalAlpha = (1 - ph) * 0.9; ctx.beginPath(); ctx.arc(176, 168, 14 + ph * 40, -0.9, 0.9); ctx.stroke(); }
+        ctx.restore();
+        emo(ctx, "📣", 168 + (R ? 0 : Math.sin(t * 22) * 1.5), 168, 30);
+        speech(ctx, 112, 318, "Hepsi yarı fiyatına!", 12, C.red3, "#fffaf2", C.red2, 132);
+      }
+      if (c.id === "vip") {
+        const v = S.cidMap.cvip;
+        if (v) { const g = ctx.createRadialGradient(v.x, v.y - 20, 2, v.x, v.y - 20, 70); g.addColorStop(0, "rgba(255,226,140,.5)"); g.addColorStop(1, "rgba(255,226,140,0)"); ctx.fillStyle = g; ctx.fillRect(v.x - 74, v.y - 94, 148, 130);
+          if (!R) { star4(ctx, v.x + 30 + Math.sin(t * 3) * 4, v.y - 62, 6, "#ffe27a"); star4(ctx, v.x - 28, v.y - 40 + Math.cos(t * 2.4) * 4, 5, "#fff"); } }
+      }
+      if (c.id === "pazarlik" && S.cidMap.cpz && !R) { const v = S.cidMap.cpz; ctx.save(); ctx.translate(v.x + 26, v.y - 88); ctx.rotate(t * 3); emo(ctx, "🎲", 0, 0, 16); ctx.restore(); }
+    }
+    // onarım: dönen/inen anahtar + kıvılcım
+    for (const r of S.repairs) {
+      const p = (EQ_AT[r.eq] || EQ_AT.register)(), k = clamp(r.t / 1.3, 0, 1), hit = Math.sin(k * Math.PI * 6);
+      ctx.save(); ctx.translate(p.x + 20 - (R ? 0 : Math.max(0, hit) * 6), p.y - 18); ctx.rotate(R ? -0.4 : -0.7 + Math.max(0, hit) * 0.9); ctx.globalAlpha = r.t > 1.15 ? clamp((1.5 - r.t) / 0.35, 0, 1) : 1; emo(ctx, "🔧", 0, 0, 28); ctx.restore();
+      if (!R && hit > 0.97) for (let i = 0; i < 3; i++) sparkAt(p.x + 6 + Math.random() * 10, p.y - 16);
+      if (r.t > 1.2 && !r.done) { r.done = true; floaty("Onarıldı ✓", p.x, p.y - 56, C.green3, 19); sparkles(p.x, p.y - 10, 6); }
+    }
+    // kasa arızasında sabırsız kuyruk: ünlem
+    if (S.brk.register && S.mode === "day" && !R) { const k = (t % 1.6) / 1.6; ctx.save(); ctx.globalAlpha = 1 - k * 0.5; txt(ctx, "!", REG.x + 36 + Math.sin(t * 12) * 1.4, REG.y - 40 - k * 10, 18, C.red3, 700); ctx.restore(); }
+  }
+  // iflas: inik kepenk + KAPANDI tabelası
+  function shutterSprite() {
+    const v = S.view, vw = v.x1 - v.x0, hh = H - 46;
+    return sprite("shutter|" + vw, vw, hh, c => {
+      const g = c.createLinearGradient(0, 0, 0, hh); g.addColorStop(0, "#a8b2bc"); g.addColorStop(1, "#7d8893"); c.fillStyle = g; c.fillRect(0, 0, vw, hh);
+      for (let y = 0; y < hh; y += 13) { c.fillStyle = "rgba(255,255,255,.28)"; c.fillRect(0, y, vw, 2); c.fillStyle = "rgba(40,50,60,.22)"; c.fillRect(0, y + 10, vw, 3); }
+      c.fillStyle = "rgba(255,255,255,.12)"; for (let x = 20; x < vw; x += 46) c.fillRect(x, 0, 10, hh);
+      c.fillStyle = "#59636d"; c.fillRect(0, hh - 22, vw, 22); c.fillStyle = "rgba(255,255,255,.3)"; c.fillRect(0, hh - 22, vw, 3);
+      rr(c, vw / 2 - 26, hh - 18, 52, 10, 5); c.fillStyle = "#3f4851"; c.fill();
+      // KAPANDI tabelası (zincirle asılı)
+      const cx = vw / 2, sy = hh * 0.38;
+      c.strokeStyle = "#3f4851"; c.lineWidth = 3; c.beginPath(); c.moveTo(cx - 70, sy - 70); c.lineTo(cx - 52, sy - 20); c.moveTo(cx + 70, sy - 70); c.lineTo(cx + 52, sy - 20); c.stroke();
+      rr(c, cx - 112, sy - 24, 224, 74, 14); c.fillStyle = "#c63d1d"; c.fill(); c.lineWidth = 5; c.strokeStyle = "#fff"; c.stroke();
+      c.font = "700 44px " + FONT_T; c.textAlign = "center"; c.textBaseline = "middle"; c.fillStyle = "#fff"; c.fillText("KAPANDI", cx, sy + 8);
+      c.font = "700 14px " + FONT_T; c.fillStyle = "#ffe8d9"; c.fillText("Köşe Market · hesaplar kapandı", cx, sy + 38);
+      c.save(); c.translate(cx + 150, sy + 62); c.rotate(0.1); rr(c, -46, -17, 92, 34, 5); c.fillStyle = "#fffaf2"; c.fill(); c.lineWidth = 2; c.strokeStyle = "#a8321d"; c.stroke();
+      c.font = "700 15px " + FONT_T; c.fillStyle = "#a8321d"; c.fillText("KİRALIK", 0, -4); c.font = "700 10px " + FONT_T; c.fillStyle = "#6b5443"; c.fillText("içeride sor", 0, 10); c.restore();
+      c.font = "28px " + EMOJI; c.fillText("🔒", cx, hh - 13);
+    });
+  }
+  function drawShutter(ctx) {
+    if (S.shut <= 0.002) return;
+    const v = S.view, vw = v.x1 - v.x0, e = 1 - Math.pow(1 - clamp(S.shut, 0, 1), 3), len = (H - 46) * e, sp = shutterSprite();
+    ctx.save(); ctx.beginPath(); ctx.rect(v.x0, 46, vw, len); ctx.clip();
+    drawSprite(ctx, sp, v.x0 + vw / 2, 46 + len - sp.lh / 2);
+    ctx.restore();
+  }
+
+  // müşteri üstüne ekstra kılık (hırsız maskesi, VIP takım elbise, gezgin satıcı, ihtiyar komşu)
+  function drawExtra(ctx, c, x, y, rx, ry, top, fx, fy, eyeX, fs) {
+    const lk = c.look, t = S.time, R = S.reduce;
+    switch (lk.extra) {
+      case "thief": {
+        ctx.fillStyle = "#1d1b26"; ctx.beginPath(); ctx.ellipse(x, top + 7, rx * 0.88, 11, 0, Math.PI, 0); ctx.fill();
+        rr(ctx, x - rx * 0.92, top + 5, rx * 1.84, 6, 3); ctx.fillStyle = "#2f2b3d"; ctx.fill();
+        rr(ctx, fx - 16 * fs, fy - 9, 32 * fs, 12, 5); ctx.fillStyle = "#1d1b26"; ctx.fill();
+        const lx = c.dir * 1.9;
+        ctx.fillStyle = "#fff"; ctx.beginPath(); ctx.ellipse(fx - eyeX + lx, fy - 3, 3.6, 2.4, 0, 0, Math.PI * 2); ctx.ellipse(fx + eyeX + lx, fy - 3, 3.6, 2.4, 0, 0, Math.PI * 2); ctx.fill();
+        circle(ctx, fx - eyeX + lx * 1.9, fy - 3, 1.5, C.ink); circle(ctx, fx + eyeX + lx * 1.9, fy - 3, 1.5, C.ink);
+        if (c.caught) for (let i = 0; i < 3; i++) { const a = (R ? 0 : t * 5) + i * 2.09; star4(ctx, x + Math.cos(a) * rx * 0.95, top - 8 + Math.sin(a) * 5, 5.5, "#ffd34d"); }
+        else if (c.sneak && !R) { ctx.save(); ctx.globalAlpha = 0.55 + Math.sin(t * 6) * 0.4; txt(ctx, "…", x + rx * 0.8, top - 10, 18, "#6d6a8a", 700); ctx.restore(); }
+        break;
+      }
+      case "vip": {
+        tri(ctx, x - 8, y - ry * 0.05, x + 8, y - ry * 0.05, x, y + ry * 0.55, "#fff");
+        tri(ctx, x - 2.8, y + ry * 0.05, x + 2.8, y + ry * 0.05, x, y + ry * 0.5, "#d63b3b");
+        rr(ctx, x - 10, top - 11, 20, 14, 3); ctx.fillStyle = "#16151c"; ctx.fill(); ellipse(ctx, x, top + 3, 16, 3.6, "#16151c"); ctx.fillStyle = C.gold; ctx.fillRect(x - 10, top - 2, 20, 2.6);
+        ctx.fillStyle = "#16151c"; ctx.beginPath(); ctx.ellipse(fx - eyeX, fy - 2, 6.6 * fs, 4.4, 0, 0, Math.PI * 2); ctx.ellipse(fx + eyeX, fy - 2, 6.6 * fs, 4.4, 0, 0, Math.PI * 2); ctx.fill();
+        ctx.fillRect(fx - eyeX + 4, fy - 3, eyeX * 2 - 8, 1.8);
+        ctx.fillStyle = "rgba(255,255,255,.5)"; ctx.fillRect(fx - eyeX - 3, fy - 4.4, 3, 1.4); ctx.fillRect(fx + eyeX - 3, fy - 4.4, 3, 1.4);
+        break;
+      }
+      case "salesman": {
+        ctx.fillStyle = "#4a2f1a"; ctx.beginPath(); ctx.ellipse(x, top + 6, rx * 0.62, 11, 0, Math.PI, 0); ctx.fill(); ellipse(ctx, x, top + 7, rx * 0.95, 3.4, "#3a2412");
+        ctx.fillStyle = "#4a2f1a"; ctx.beginPath(); ctx.ellipse(fx - 4.5, fy + 2.4, 4.6, 1.9, -0.3, 0, Math.PI * 2); ctx.ellipse(fx + 4.5, fy + 2.4, 4.6, 1.9, 0.3, 0, Math.PI * 2); ctx.fill();
+        const sx = x + c.dir * (rx + 8); rr(ctx, sx - 9, y + ry * 0.35, 18, 14, 3); ctx.fillStyle = "#8a5a2b"; ctx.fill(); ctx.lineWidth = 1.5; ctx.strokeStyle = "#5a3a1a"; ctx.stroke();
+        ctx.beginPath(); ctx.arc(sx, y + ry * 0.35, 4, Math.PI, 0); ctx.stroke(); ctx.fillStyle = C.gold; ctx.fillRect(sx - 2, y + ry * 0.35 + 5, 4, 3);
+        break;
+      }
+      case "elder": {
+        for (let i = -1; i <= 1; i++) circle(ctx, x + i * 8, top + 5 + Math.abs(i) * 2, 5.5, "#e9e5de");
+        ctx.strokeStyle = C.ink; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.arc(fx - eyeX, fy - 2, 5.4 * fs, 0, Math.PI * 2); ctx.moveTo(fx + eyeX + 5.4 * fs, fy - 2); ctx.arc(fx + eyeX, fy - 2, 5.4 * fs, 0, Math.PI * 2); ctx.moveTo(fx - eyeX + 5.4 * fs, fy - 2); ctx.lineTo(fx + eyeX - 5.4 * fs, fy - 2); ctx.stroke();
+        const cx = x - c.dir * (rx + 6); ctx.strokeStyle = "#7a5a3a"; ctx.lineWidth = 3; ctx.lineCap = "round"; ctx.beginPath(); ctx.moveTo(cx, y + ry * 0.2); ctx.lineTo(cx - c.dir * 3, y + ry + 4); ctx.stroke(); ctx.beginPath(); ctx.arc(cx + c.dir * 2, y + ry * 0.2, 3.6, Math.PI, Math.PI * 1.9); ctx.stroke(); ctx.lineCap = "butt";
+        break;
       }
     }
   }
@@ -1410,7 +2036,7 @@
   const rgba = (c, a) => "rgba(" + c[0] + "," + c[1] + "," + c[2] + "," + a.toFixed(3) + ")";
   const CANDLES = [[700, 335], [820, 335], [115, 268]];
   function drawLight(ctx) {
-    const v = S.view, vw = v.x1 - v.x0, dark = S.ekind === "dark" && S.mode === "day";
+    const v = S.view, vw = v.x1 - v.x0, dark = isDark();
     const Lt = lightAt(lightP());
     ctx.save();
     ctx.globalCompositeOperation = "multiply";
@@ -1499,12 +2125,14 @@
     return true;
   }
   function prodSignature() {
-    const st = curState(), stock = (st && st.stock) || {};
-    return S.layoutSig + "|" + shelfCap() + "|" + S.slots.map(sl => Math.max(0, stock[sl.p.id] || 0)).join(",");
+    if (S.psCache && S.time - S.psT < 0.1 && S.time >= S.psT) return S.psCache;
+    S.psT = S.time;
+    S.psCache = S.layoutSig + "|" + shelfCap() + "|" + S.slots.map(sl => { const i = slotInfo(sl); return i.n + ":" + i.tier + ":" + i.price + ":" + i.tonight + (i.hot ? "h" : ""); }).join(",");
+    return S.psCache;
   }
   function statSignature() {
     const st = curState(), p = S.plan || {};
-    return JSON.stringify([S.upg, S.badges, p.day, p.weekday && (p.weekday.id || p.weekday), S.event && S.event.id, S.ekind, S.weather && S.weather.id, S.wkind, S.mode === "day", S.mode === "idle" && S.phase === "evening", st && st.day, S.layoutSig, S.rows]);
+    return JSON.stringify([S.upg, S.badges, p.day, p.weekday && (p.weekday.id || p.weekday), S.event && S.event.id, S.ekind, S.weather && S.weather.id, S.wkind, S.mode === "day", S.mode === "idle" && S.phase === "evening", st && st.day, S.layoutSig, S.rows, S.brk.fridge, S.brk.register, wearOf(S.eqc.fridge), wearOf(S.eqc.register), S.debtLv, st && st.diff]);
   }
   function ensureLayers() {
     const v = S.view;
@@ -1554,13 +2182,14 @@
     drawCounterBack(ctx);
     blit(ctx, lay.front);
     drawKeeperHands(ctx);
+    drawFxBack(ctx);
     // yerdeki varlıkları y'ye göre sırala
     for (const c of S.customers) ents.push({ y: c.y, c, f: 0 });
     ents.push({ y: S.cat.y, f: 1 });
     if (S.upg.helper) ents.push({ y: 468 + 26, f: 2 });
     if ((S.upg.mat || 0) >= 2) ents.push({ y: 522, f: 3 });
-    if (S.upg.plant) ents.push({ y: 520, f: 4 });
-    if (S.ekind === "inspect") ents.push({ y: 498, f: 5 });
+    if ((S.upg.plant || 0) >= 2) ents.push({ y: 520, f: 4 });
+    if (S.ekind === "inspect" || (S.crisis && S.crisis.id === "denetci")) ents.push({ y: 498, f: 5 });
     ents.sort((a, b) => a.y - b.y);
     for (const e of ents) {
       switch (e.f) {
@@ -1572,12 +2201,16 @@
         case 5: drawInspector(ctx); break;
       }
     }
+    drawFxFront(ctx);
     drawEventDecor(ctx);
     drawLight(ctx);
     drawSignText(ctx);
+    drawShutter(ctx);
     blit(ctx, lay.top);
     drawParts(ctx);
     drawBanner(ctx);
+    drawAlertVignette(ctx);
+    drawFlash(ctx);
   }
 
   function update(dt) {
@@ -1590,6 +2223,7 @@
     S.customers = S.customers.filter(c => { if (c.gone) { delete S.cidMap[c.cid]; freePay(c); } return !c.gone; });
     for (const c of S.customers) if (c.sad > 0 && !(c.cur && c.cur.k === "sad")) c.sad -= dt * 0.6;
     updCat(dt);
+    updateFx(dt);
     // çırak rafla kasa arasında dolaşır
     const h = S.helper; h.t -= dt;
     if (h.t <= 0) { h.tx = 250 + Math.random() * 300; h.t = 3 + Math.random() * 4; }
@@ -1613,6 +2247,12 @@
       }
       case "customerMiss": {
         const c = custOf(ev.cid);
+        if (ev.reason === "register") { // kasa bozuk: kuyrukta sabırsızlanıp kızgın çıkar
+          c.think = "🧾";
+          const i = claimPay(c); c.spot = { x: 706 - 36 * i, y: 476 + 7 * i };
+          c.q.push({ k: "walk", x: c.spot.x, y: c.spot.y }, { k: "wait", d: 0.6 }, { k: "sad", mad: true });
+          break;
+        }
         c.think = ev.productId ? productEmoji(ev.productId) : "❓";
         const sp = pickSpot(c, standX(ev.productId));
         c.q.push({ k: "walk", x: sp.x, y: sp.y }, { k: "wait", d: 0.3 }, { k: "sad" });
@@ -1630,17 +2270,54 @@
         break;
       }
       case "restock": {
+        if (ev.bulk) { // toptancı kamyonu: koli yığını rafa uçar
+          const n = S.slots.length ? 6 : 0;
+          for (let i = 0; i < n; i++) { const sl2 = S.slots[(i * 2) % S.slots.length]; spawnFly("📦", L.door.x + 20, 340, sl2.x, sl2.y - 20, i * 0.12); }
+          floaty("🚚 +" + (ev.qty || 0) + " ürün", L.door.x - 70, 300, C.blue, 18); sfx("coin"); break;
+        }
         const sl = slotFor(ev.productId);
         if (sl) { spawnFly("📦", L.door.x, 300, sl.x, sl.y - 20); floaty("+" + (ev.qty || 0) + " " + productEmoji(ev.productId), sl.x, sl.y - 50, C.blue, 18); }
         break;
       }
       case "tip": floaty("+₺" + (ev.amount || 0) + " bahşiş", 746, 240, "#c0476a", 18); hearts(760, 270, 3); break;
       case "goalDone": confetti(80); S.banner = { text: "Hedef tamam!", t: 0, max: 2.4 }; break;
-      case "bubbleSpawn": if (ev.bubble && ev.bubble.zone === "cat") { S.cat.alert = 2; if (S.cat.st === "sleep") { S.cat.st = "sit"; S.cat.t = 4; } } break;
+      case "bubbleSpawn": {
+        const b = ev.bubble || {};
+        if (b.zone === "cat") { S.cat.alert = 2; if (S.cat.st === "sleep") { S.cat.st = "sit"; S.cat.t = 4; } }
+        if (b.type === "thief") thiefStart(b);
+        else if (b.type === "breakFridge") { S.warn.fridge = 1; sfx("zap"); }
+        else if (b.type === "breakReg") { S.warn.register = 1; sfx("zap"); }
+        break;
+      }
+      case "bubbleExpire": thiefExpire(ev.bubbleId); if (ev.autoSolved) { S.warn.fridge = 0; S.warn.register = 0; } break;
+      case "theft": thiefTheft(ev); break;
+      case "thiefCaught": thiefCaught(ev); break;
+      case "breakdown": breakdownFx(ev.equip); break;
+      case "repair": repairFx(ev.equip); break;
+      case "salvo": {
+        S.salvoT = 7; S.banner = { text: "YOĞUN SAAT!", t: 0, max: 2.2, kind: "salvo" };
+        crowd(Math.min(3, ev.count || 3), "sv" + (++S.salvoSeq) + "_", false);
+        S.bell = 1; sfx("salvo");
+        try {
+          if (!S.layerEl) S.layerEl = document.getElementById("bubble-layer");
+          if (S.layerEl) { S.layerEl.classList.add("km-salvo"); clearTimeout(S.salvoTO); S.salvoTO = setTimeout(() => { S.layerEl && S.layerEl.classList.remove("km-salvo"); }, 7000); }
+        } catch (e) { /* yok say */ }
+        break;
+      }
+      case "spoil": {
+        const sl = S.spoilSlots.length ? S.spoilSlots : S.slots.slice(0, 4);
+        sl.slice(0, 5).forEach(q => { for (let i = 0; i < (S.reduce ? 1 : 3); i++) pushPart({ k: "puff", x: q.x + (Math.random() - .5) * 30, y: (q.y || 150) - 8, vx: (Math.random() - .5) * 14, vy: -22, life: 1.2, max: 1.2, r: 5 }); });
+        floaty("Bozuldu −" + (ev.units || 0), (L.shelf.x + L.shelf.x1) / 2, 128, "#4b6314", 20); sfx("spoil");
+        break;
+      }
+      case "crisisOpen": crisisStart(ev.crisis || {}); break;
+      case "crisisResolve": crisisResolveFx(ev); break;
       // Mekanik ajanın bubblePop kancası (yoksa hiç gelmez, sahne eskisi gibi çalışır)
       case "bubblePop": {
         if (typeof ev.x === "number" && typeof ev.y === "number") {
-          coinFly(ev.x, ev.y, ev.golden ? 5 : 3);
+          if (ev.special === "crisis") { emoPart("❓", ev.x, ev.y - 10, 28); sparkles(ev.x, ev.y, 5); }
+          else if (ev.special === "break") sparkles(ev.x, ev.y, 4);
+          else if (ev.reward > 0 || ev.reward == null) coinFly(ev.x, ev.y, ev.golden ? 5 : 3);
           if (ev.golden) sparkles(ev.x, ev.y, 5);
           const tt = norm(String(ev.zone || "") + " " + String(ev.bubbleType || ev.btype || ""));
           if (/\bcat\b|pet|pamuk|kedi/.test(tt)) { hearts(ev.x, ev.y - 10, 5); sfx("purr"); }
@@ -1648,7 +2325,7 @@
         break;
       }
       case "levelUp": confetti(60); break;
-      case "dayEnd": S.customers.forEach(c => { if (!c.leaving) { c.q = [{ k: "leave" }]; c.cur = null; } }); break;
+      case "dayEnd": S.customers.forEach(c => { if (!c.leaving) { c.prop = false; c.q = [{ k: "leave" }]; c.cur = null; } }); S.thief = null; break;
       default: break;
     }
   }
@@ -1679,6 +2356,7 @@
       canvasEl.style.width = canvasEl.style.width || "100%";
       if (!canvasEl.style.aspectRatio) canvasEl.style.aspectRatio = W + " / " + H;
       watchMotion();
+      try { S.layerEl = document.getElementById("bubble-layer"); S.appEl = document.getElementById("app"); } catch (e) { /* yok say */ }
       // Web fontu geç gelirse statik katmandaki yazılar yeniden boyansın
       try { if (global.document && document.fonts && document.fonts.addEventListener) document.fonts.addEventListener("loadingdone", () => { S.layerSig = null; sprites.clear(); }); } catch (e) { /* yok say */ }
       relayout();
@@ -1705,6 +2383,7 @@
     get view() { return { x0: S.view.x0, x1: S.view.x1 }; },
     setDay(plan, state) {
       S.mode = "day"; S.customers = []; S.cidMap = {}; S.parts = []; S.payQ = []; S.prints = []; S.banner = null;
+      S.thief = null; S.crisis = null; S.blackout = 0; S.salvoT = 0; S.repairs = []; S.warn = { fridge: 0, register: 0 }; S.gen = 0; S.redT = 0; S.flashT = 0; S.blastT = 0;
       applyPlan(plan, state);
       S.cat.st = "sit"; S.cat.t = 2; S.doorOpen = 1; S.bell = 1; S.windT = 4;
       sfx("ambient", S.wkind);
@@ -1712,11 +2391,12 @@
     idle(state, phase, plan) {
       S.mode = "idle"; S.phase = phase || "morning"; S.state = state || S.state;
       if (plan) S.plan = plan;
-      S.customers.forEach(c => { if (!c.leaving) { c.q = [{ k: "leave" }]; c.cur = null; } });
+      S.customers.forEach(c => { if (!c.leaving) { c.prop = false; c.q = [{ k: "leave" }]; c.cur = null; } });
+      S.thief = null; S.crisis = null; S.blackout = 0; S.salvoT = 0; S.repairs = []; S.warn = { fridge: 0, register: 0 }; S.gen = 0; S.redT = 0;
       applyPlan(S.plan, S.state);
       sfx("stopAmbient");
     },
-    refresh() { readUpgrades(); },       // yükseltme/ürün alınca sahneyi güncelle
+    refresh() { readUpgrades(); readEq(); S.debtLv = debtLevel(); S.layerSig = null; },       // yükseltme/ürün alınca sahneyi güncelle
     handle, update, draw,
     confetti, floaty,
     // kalite bayrakları (test / ayar için)

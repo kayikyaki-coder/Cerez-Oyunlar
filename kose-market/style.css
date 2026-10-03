@@ -15,6 +15,8 @@
   --pink: #ff8fab; --pink-soft: #ffe6ee; --pink-edge: #ffd0da; --purple-soft: #ece3ff;
   --wood: #9a6438; --wood2: #71472a; --track: #eaddc7;
   --danger: var(--red2);
+  --pink-deep: #c2456a; --orange: #e8741f;
+  --clock-1: #ffc65a; --clock-2: #ff9f43; --clock-3: #f2706b; --clock-4: #9b6fd0;
   /* gölge / yarıçap / boşluk */
   --shadow-1: 0 3px 0 rgba(120,70,30,.10);
   --shadow-2: 0 6px 0 rgba(120,70,30,.08), 0 12px 28px rgba(150,80,20,.10);
@@ -196,7 +198,7 @@ button { font: inherit; color: inherit; }
 .dc-reg { background: #fff; border: 2px solid var(--edge); border-radius: 999px; padding: 2px 9px 2px 4px; font-size: 12px; font-weight: 800; display: inline-flex; align-items: center; gap: 4px; }
 .dc-reg .e { font-size: 17px; }
 .dc-hot { display: flex; gap: 4px; flex-wrap: wrap; font-size: 12px; font-weight: 800; align-items: center; }
-.dc-hot .hp { background: #fff; border-radius: 8px; padding: 1px 6px; border: 2px solid var(--edge); }
+.dc-hot .hotp { background: #fff; border-radius: 8px; padding: 1px 6px; border: 2px solid var(--edge); }
 
 .pamuk-tip {
   margin: 16px 0 4px; background: #fff; border: 3px dashed var(--pink-edge); border-radius: var(--r-lg); padding: 10px 14px 10px 56px;
@@ -307,12 +309,18 @@ button { font: inherit; color: inherit; }
 .hud-clock { flex: 1 1 160px; gap: 3px; }
 /* saat çubuğu: iz üzerinde sabah → öğle → akşam gökyüzü gradyanı, dolgu turuncu */
 .clock-bar { position: relative; height: 16px; background: linear-gradient(90deg, #ffe9b0, #ffd9a0 45%, #e9cdd9 80%, #cbbbe6); border-radius: var(--r-sm); border: 2px solid var(--edge-strong); overflow: visible; }
-.clock-bar i { position: absolute; left: 0; top: 0; bottom: 0; width: 0; background: linear-gradient(90deg, #ffc65a, #ff9f43); border-radius: 8px; box-shadow: inset 0 2px 0 rgba(255,255,255,.4); }
+/* dolgu: gradyan tüm çubuğa göre ölçeklenir (--p: ui.js), gün ilerledikçe altın → turuncu → akşam mercanı → gece moru */
+.clock-bar i {
+  --p: 0; position: absolute; left: 0; top: 0; bottom: 0; width: 0; border-radius: 8px; box-shadow: inset 0 2px 0 rgba(255,255,255,.4);
+  background: linear-gradient(90deg, var(--clock-1), var(--clock-2) 42%, var(--clock-3) 74%, var(--clock-4)) left / calc(100% / max(var(--p), .05)) 100% no-repeat;
+}
+.clock-bar.closing { border-color: var(--red); animation: mechPulse 1s ease-in-out infinite; }
 .clock-bar span { position: absolute; top: 50%; left: 0; transform: translate(-50%, -50%); font-size: 18px; filter: drop-shadow(0 1px 0 rgba(0,0,0,.15)); }
 .hud-hearts { flex-direction: row; align-items: center; font-size: 16px; letter-spacing: 0; white-space: nowrap; }
 .hud-hearts.down { animation: shakeX .4s; }
 @keyframes shakeX { 0%,100% { transform: none; } 25% { transform: translateX(-4px); } 75% { transform: translateX(4px); } }
 /* ui.js `.hp` kalp kancası gelirse CSS kalp çizilir (gelmezse emoji kalır) */
+.hud-hearts .hp::before { content: none; }
 .hud-hearts .hp {
   display: inline-block; width: 17px; height: 16px; margin: 0 1px; background: #ead9cf;
   -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 22'%3E%3Cpath d='M12 21C5 15 1 11.5 1 7a5.5 5.5 0 0 1 11-1.5A5.5 5.5 0 0 1 23 7c0 4.5-4 8-11 14z'/%3E%3C/svg%3E") center / contain no-repeat;
@@ -465,10 +473,18 @@ button { font: inherit; color: inherit; }
 @keyframes toastIn { 0% { opacity: 0; transform: translateY(-10px) scale(.95); } 10%, 82% { opacity: 1; transform: none; } 100% { opacity: 0; transform: translateY(-8px); } }
 
 /* ---------- Hava / saat kancaları (ui.js #app[data-*] eklerse; yoksa etkisiz) ---------- */
-#app[data-phase="dusk"] .clock-bar i, #app[data-phase="evening"] .clock-bar i { background: linear-gradient(90deg, #ffb26b, #b388d9); }
 #app[data-weather="yagmur"] .hud, #app[data-weather="kar"] .hud { background: #f2f6fb; }
 #app[data-weather="sicak"] .hud { background: #fff6e4; }
 #app[data-event="kesinti"] .hud { background: #ece5f2; }
+/* tehlike: bir şey ters giderken HUD çerçevesi ve saat çubuğu renk değiştirir (render.js #app[data-alert] yazar) */
+#app[data-alert] .hud { border-color: var(--alert-c, var(--gold)); }
+#app[data-alert="crisis"] { --alert-c: var(--gold); }
+#app[data-alert="thief"] { --alert-c: var(--pink-deep); }
+#app[data-alert="break"] { --alert-c: var(--orange); }
+#app[data-alert="salvo"] { --alert-c: var(--orange); }
+#app[data-alert] .hud-clock .clock-bar { border-color: var(--alert-c, var(--gold)); }
+@media (prefers-reduced-motion: no-preference) { #app[data-alert] .hud { animation: alertGlow 1.1s ease-in-out infinite; } }
+@keyframes alertGlow { 50% { box-shadow: var(--shadow-2), 0 0 0 4px var(--alert-glow, rgba(242,177,52,.4)); } }
 
 /* ---------- Duyarlı ---------- */
 @media (max-width: 860px) {
@@ -557,7 +573,7 @@ button { font: inherit; color: inherit; }
     padding: 10px 12px; font-size: 13px; font-weight: 800; line-height: 1.35;
   }
   .di-head { display: flex; flex-wrap: wrap; gap: 6px; }
-  .di-pill { background: var(--cream2); border: 2px solid var(--edge); border-radius: 999px; padding: 1px 9px; font-size: 12.5px; white-space: nowrap; }
+  .di-pill { background: var(--cream2); border: 2px solid var(--edge); border-radius: 999px; padding: 1px 9px; font-size: 12.5px; white-space: normal; max-width: 100%; overflow-wrap: anywhere; }
   .di-pill.ev { background: var(--pink-soft); border-color: var(--pink-edge); }
   .di-regs b { font-weight: 800; }
   .di-tip { color: var(--ink2); }

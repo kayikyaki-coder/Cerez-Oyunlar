@@ -215,7 +215,9 @@
   background: #ffd34d; clip-path: polygon(50% 0, 62% 38%, 100% 50%, 62% 62%, 50% 100%, 38% 62%, 0 50%, 38% 38%);
   animation: km-twinkle .8s ease-in-out 2;
 }
-.km-ftxt.bad::before, .km-ftxt.bad::after, .km-ftxt.helper::before, .km-ftxt.helper::after { display: none; }
+.km-ftxt.bad::before, .km-ftxt.bad::after, .km-ftxt.helper::before, .km-ftxt.helper::after, .km-ftxt.note::before, .km-ftxt.note::after { display: none; }
+.km-ftxt.note .km-ftxt-main { font-size: 20px; color: var(--ink, #3a2a1f); text-shadow: 0 3px 0 rgba(120,70,30,.2); }
+.km-ftxt.note.gold .km-ftxt-main { color: #8a5a00; }
 .km-ftxt.gold .km-ftxt-main { color: #b87400; font-size: 28px; text-shadow: 0 3px 0 rgba(200, 130, 0, .3); }
 .km-ftxt-tag {
   font-family: var(--font-t, 'Fredoka', ui-rounded, system-ui, sans-serif); font-weight: 700; font-size: 13px; color: #fff;
@@ -253,8 +255,21 @@
   box-shadow: 0 3px 0 hsl(calc((var(--h) - 12) * 1deg) 70% 38%), 0 6px 14px rgba(90, 40, 10, .22);
   text-shadow: 0 2px 0 rgba(0, 0, 0, .22);
 }
+/* "x1.7" büyük, altında küçük "KOMBO" etiketi */
+.km-combo-txt b { display: block; font-weight: 700; line-height: 1.05; font-variant-numeric: tabular-nums; }
+.km-combo-txt small { display: block; font-size: .5em; font-weight: 700; letter-spacing: .16em; line-height: 1.1; opacity: .95; margin-top: 1px; }
 .km-combo.km-max .km-combo-txt { animation: km-hue 0.6s ease-in-out infinite alternate; }
 .km-combo.km-show { animation: km-combo-in .9s cubic-bezier(.3, 1.6, .5, 1) forwards; }
+
+/* ---------- Yoğun saat (salvo): en acil baloncuk ▼ işaretiyle öne çıkar ---------- */
+.km-first .km-float::before {
+  content: '▼'; position: absolute; left: 50%; top: -34px; transform: translateX(-50%); z-index: 6; pointer-events: none;
+  font: 700 17px/1 var(--font-t, 'Fredoka', sans-serif); color: var(--red2, #c63d1d);
+  -webkit-text-stroke: 4px #fff; paint-order: stroke fill; animation: km-first-bob .45s ease-in-out infinite alternate;
+}
+.km-first .km-core { box-shadow: inset 0 -6px 10px rgba(120, 60, 20, .14), inset 0 5px 8px rgba(255, 255, 255, .75), 0 0 0 4px rgba(239, 107, 91, .55), 0 8px 16px rgba(90, 45, 10, .18); }
+.km-layer.km-salvo .km-bub:not(.km-first) .km-core { filter: saturate(.75) brightness(1.03); }
+@keyframes km-first-bob { to { transform: translateX(-50%) translateY(5px); } }
 
 /* ---------- Keyframes ---------- */
 @keyframes km-noop { to { opacity: 1; } }
@@ -356,4 +371,5 @@
   .km-sparks i { animation: none; opacity: .8; }
   .km-bit { display: none; }
   .km-ftxt::before, .km-ftxt::after { animation: none; }
+  .km-first .km-float::before { animation: none; }
 }
