@@ -4,7 +4,7 @@
    Her iş saf fonksiyondur: (env, job) → kayıt. env = {compiled, gameInfo, opts, ratings}
 ========================================================================= */
 const { createGame, mixSeed, mulberry32 } = require('./game');
-const { makeHelpers, makeBot, pickMutationFor } = require('./bots');
+const { makeHelpers, makeBot, makeInputBot, pickMutationFor } = require('./bots');
 
 const errLine = e => e && e.stack ? e.stack.split('\n').slice(0, 3).join(' | ') : String(e);
 function shopSeconds(wave, opts){ return wave <= opts.shopEarlyUntil ? opts.shopEarly : opts.shopLate; }
@@ -38,11 +38,12 @@ function runOne(env, job){
   const rec = {
     strategy: job.cheat ? 'hileli' : botName, bot: botName, run: runIdx, seed, cheat: !!job.cheat,
     startWave: 1, deathWave: null, reachedCap: false,
-    waves: [], inGameSec: 0, shopSec: 0, estRealSec: 0,
+    waves: [], waveTaken: [], waveSrc: [], waveBlocked: [], heatLog: [], inGameSec: 0, shopSec: 0, estRealSec: 0,
     totalGold: 0, kills: 0, spent: 0, rerolls: 0, sold: 0, merges: 0,
     bought: {}, dmgByType: {}, dmgShare: {}, synergies: {}, finalBuild: null,
     goldAfterShop: {}, mutations: [], lastWaveTopShare: null, lastWaveTopKey: null,
     bossAliveAtDeath: false, maxEnemies: 0, maxEnemiesWave: 0,
+    taken: {}, bossLog: [], parries: 0, shUses: 0, shBlocked: 0,
     errors: [], anomalies: [], warnings: []
   };
   let game;
@@ -57,6 +58,9 @@ function runOne(env, job){
     try { applyCheat(A, H, opts); } catch(e){ rec.errors.push('cheat: ' + errLine(e)); return rec; }
   }
   rec.startWave = A.g('P').wave;
+  /* İnsan girdisi modeli: kalkan + işaret (bot politikasına göre) */
+  const input = makeInputBot(A, mulberry32(seed ^ 0x51ED270B), bot.pol || {});
+  const takenSum = () => { const tk = A.g('P').taken || {}; let s = 0; for(const k in tk) s += tk[k]; return s; };
 
   const WAVE_STATE = A.g('WAVE_STATE'), SHOP_STATE = A.g('SHOP_STATE'), GAMEOVER_STATE = A.g('GAMEOVER_STATE');
   const dt = 1 / opts.fps;
@@ -73,9 +77,10 @@ function runOne(env, job){
     try { A.fn('startWave')(); }
     catch(e){ rec.errors.push(`startWave(w${w}): ${errLine(e)}`); break; }
     let t = 0;
+    const tk0 = takenSum(), bl0 = A.g('P').shBlocked || 0, src0 = Object.assign({}, A.g('P').taken || {});
     while(true){
       let n;
-      try { n = A.stepWave(dt, CHUNK); }
+      try { n = A.stepWave(dt, CHUNK, input); }
       catch(e){ rec.errors.push(`updateWave(w${w}, t=${t.toFixed(2)}): ${errLine(e)}`); break outer; }
       t += n * dt;
       A.advanceClock(n * dt * 1000);
@@ -101,6 +106,9 @@ function runOne(env, job){
       }
     }
     rec.waves.push(+t.toFixed(3));
+    rec.waveTaken.push(+(takenSum() - tk0).toFixed(2));
+    rec.waveBlocked.push((A.g('P').shBlocked || 0) - bl0);
+    { const o = {}, tk = A.g('P').taken || {}; for(const k in tk){ const d = tk[k] - (src0[k] || 0); if(d > 0.5) o[k] = Math.round(d); } rec.waveSrc.push(o); }
     rec.inGameSec += t;
     let st = A.state();
     if(st === GAMEOVER_STATE){ rec.deathWave = w; break; }
@@ -122,6 +130,10 @@ function runOne(env, job){
 
   /* --- kayıt topla --- */
   const P = A.g('P');
+  for(const k in (P.taken || {})) rec.taken[k] = Math.round(P.taken[k]);
+  rec.bossLog = (P.bossLog || []).map(b => Object.assign({}, b));
+  rec.heatLog = (P.heatLog || []).slice();
+  rec.parries = P.parries || 0; rec.shUses = P.shUses || 0; rec.shBlocked = P.shBlocked || 0;
   rec.totalGold = P.totalGold;
   rec.kills = P.kills;
   rec.maxEnemies = A.maxEnemies; rec.maxEnemiesWave = A.maxEnemiesWave;

@@ -10,7 +10,7 @@ const path = require('path');
 const { spawnSync } = require('child_process');
 const { runPool } = require('./pool');
 const { crowdTable, ratingsFrom, median } = require('./ratings');
-const { F1_BOTS, ARCHETYPES } = require('./bots');
+const { F1_BOTS, REF_BOTS, ARCHETYPES } = require('./bots');
 
 /* "Mevcut 19 silah" (F2 #11 yeni-silah ayrımı ve #15 regresyonu için sabit referans) */
 const ORIGINAL_19 = ['tabanca','midye','zipkin','taramali','pompali','vampir','levye','kurek','yumruk','bumerang',
@@ -34,7 +34,7 @@ const mins = r => r.estRealSec / 60;
 
 function botStats(runs, opts){
   const out = {};
-  for(const b of F1_BOTS){
+  for(const b of F1_BOTS.concat(REF_BOTS)){
     const rs = runs.filter(r => r.bot === b && !r.cheat);
     if(!rs.length) continue;
     const w = rs.map(r => dw(r, opts)), m = rs.map(mins);
@@ -54,7 +54,7 @@ function botStats(runs, opts){
 function computeMetrics(ctx){
   const { runs, cheatRuns, crowd, perf, opts } = ctx;
   const S = botStats(runs, opts);
-  const std = runs.filter(r => !r.cheat);
+  const std = runs.filter(r => !r.cheat && F1_BOTS.includes(r.bot));      // referans botlar (iyi2n/ortan) hariç
   const M = [];
   const add = (id, name, value, target, pass, note) => M.push({ id, name, value, target, pass, note: note || '' });
   const need = b => S[b] || { n: 0 };
@@ -89,8 +89,8 @@ function computeMetrics(ctx){
   const arch = Object.keys(ARCHETYPES).filter(a => S[a]);
   const am = arch.map(a => S[a].wMed);
   const over20 = am.filter(x => x > 20).length, spread = Math.max(...am) - Math.min(...am);
-  add(8, 'strateji çeşitliliği', `${over20}/6 archetype > 20; fark ${f1(spread)} (${arch.map(a => `${a} ${f1(S[a].wMed)}`).join(', ')})`,
-      '≥ 4/6 medyanı > 20; en iyi–en kötü ≤ 5', over20 >= 4 && spread <= 5);
+  add(8, 'strateji çeşitliliği', `${over20}/${arch.length} archetype > 20; fark ${f1(spread)} (${arch.map(a => `${a} ${f1(S[a].wMed)}`).join(', ')})`,
+      `≥ 5/${arch.length} medyanı > 20; en iyi–en kötü ≤ 5 (Kontrol dahil)`, over20 >= Math.ceil(arch.length * 0.7) && spread <= 5);
   /* 9 tek silah hakimiyeti (son dalga, silah örneği) */
   const ts = std.map(r => r.lastWaveTopShare).filter(Number.isFinite);
   const over60 = ts.filter(x => x > 0.60).length / Math.max(1, ts.length), maxTs = Math.max(...ts);
@@ -162,7 +162,64 @@ function computeMetrics(ctx){
   const missing = ORIGINAL_19.filter(id => pres[id].p < 0.20);
   add(15, 'regresyon (19 silah archetype kadrosunda)', missing.length ? 'eksik: ' + missing.map(id => `${id} ${pct(pres[id].p)}`).join(', ') : 'hepsi ≥ %20',
       'her silah ≥1 archetype\'ta ≥ %20', missing.length === 0);
+  /* ---- Yeni ölçütler (mekanik paketi) ---- */
+  /* 16 sıfır-hasar dalga payı (w6–20, hayatta tamamlanan dalgalar; kalkansız eşitler dahil) */
+  let zw = 0, tw = 0;
+  for(const r of std.filter(r => ['orta','iyi2'].concat(Object.keys(ARCHETYPES)).includes(r.bot))){
+    r.waves.forEach((t, j) => {
+      const w = r.startWave + j;
+      if(w < 6 || w > 20 || r.deathWave === w || !r.waveTaken) return;
+      tw++; if(r.waveTaken[j] <= 0.001 && !(r.waveBlocked && r.waveBlocked[j] > 0)) zw++;
+    });
+  }
+  const zeroShare = tw ? zw / tw : NaN;
+  add(16, 'tehditsiz dalga payı (w6–20)', `${pct(zeroShare)} (${zw}/${tw} dalga: hasar yok ve kalkan kullanılmadı)`, '≤ %50 (önceki ≈ %67–91)', Number.isFinite(zeroShare) && zeroShare <= 0.50);
+  /* 17 boss etkisi: w10–20 boss karşılaşmalarında ahtapota ulaşma + verdiği hasar (maks canın %'si) */
+  const bl = std.filter(r => ['orta','iyi2'].concat(Object.keys(ARCHETYPES)).includes(r.bot))
+                .flatMap(r => (r.bossLog || []).filter(b => b.wave >= 10 && b.wave <= 20).map(b => Object.assign({ maxHp: r.finalBuild.maxHp || 100 }, b)));
+  const reachShare = bl.length ? bl.filter(b => b.reach).length / bl.length : NaN;
+  /* etki = ahtapota işleyen + kalkanın yuttuğu (kalkansız olsaydı işleyecek) hasar */
+  const dealtPct = bl.map(b => (b.dealt + (b.blockedDmg || 0)) / Math.max(1, b.maxHp));
+  const dealtMed = q(dealtPct, .5);
+  add(17, 'boss etkisi (w10–20)', `ahtapota ulaşma ${pct(reachShare)}, etkisi (işleyen+kalkanın yuttuğu hasar) medyan maks canın ${pct(dealtMed)} (p90 ${pct(q(dealtPct, .9))}), n=${bl.length}; ` +
+      `boss-dalga ölüm w10–20 ${pct(bossDeathMid(std))}`, 'medyan etki ≥ %8 maks can; w10–20 boss-dalga ölümü %3–20 (ulaşma yalnız bilgi: Kalamar/Fener menzilden vurur)',
+      dealtMed >= 0.08 && inR(bossDeathMid(std), 0.03, 0.20));
+  /* 18 kalkan etkisi: iyi2 (kalkan 0,8) − iyi2n (kalkansız) medyan dalga farkı */
+  const i2n = S.iyi2n, on = S.ortan;
+  if(i2n && i2n.n){
+    const d = i2.wMed - i2n.wMed, d2 = (S.orta && on) ? S.orta.wMed - on.wMed : NaN;
+    add(18, 'aktif girdi etkisi (kalkan+işaret)', `iyi2 ${f1(i2.wMed)} vs kalkansız ${f1(i2n.wMed)} (Δ ${f1(d)}); orta ${f1(S.orta.wMed)} vs ${f1(on ? on.wMed : NaN)} (Δ ${f1(d2)}); ` +
+        `iyi2 savuş/koşu ${f1(avg(std.filter(r => r.bot === 'iyi2').map(r => r.parries)))}`, '0 ≤ Δ ≤ +3 dalga (oyun kolaylaşmasın, anlamlı olsun)', d >= 0 && d <= 3);
+  }else add(18, 'aktif girdi etkisi (kalkan+işaret)', 'referans bot koşusu yok (--refRuns 0)', '0 ≤ Δ ≤ +3 dalga', null);
+  /* 19 hasar kaynağı çeşitliliği: en çok hasar veren 3 kaynak payı + tek kaynak payı */
+  const tkSum = {};
+  for(const r of std) for(const k in (r.taken || {})) tkSum[k] = (tkSum[k] || 0) + r.taken[k];
+  const tkTot = Object.values(tkSum).reduce((a, b) => a + b, 0);
+  const tkSorted = Object.entries(tkSum).sort((a, b) => b[1] - a[1]);
+  const top3 = tkSorted.slice(0, 3).reduce((a, [, v]) => a + v, 0) / Math.max(1, tkTot);
+  const top1 = tkSorted.length ? tkSorted[0][1] / Math.max(1, tkTot) : NaN;
+  add(19, 'hasar kaynağı çeşitliliği', `ilk 3 kaynak ${pct(top3)} (${tkSorted.slice(0, 5).map(([k, v]) => `${k} ${pct(v / tkTot)}`).join(', ')})`,
+      'ilk 3 ≤ %60 ve tek kaynak ≤ %30 (önceki %76 / %36)', top3 <= 0.60 && top1 <= 0.30);
+  /* 20 Fener Balığı / boss hasarsızlığı: her boss türü ahtapota en az bir kez hasar vermiş mi */
+  const bt = {};
+  for(const r of std) for(const b of (r.bossLog || [])){ const o = bt[b.type] = bt[b.type] || { n: 0, dealt: 0, hit: 0 }; o.n++; o.dealt += b.dealt; if(b.dealt > 0 || b.blocked > 0) o.hit++; }
+  const noHit = Object.keys(bt).filter(k => bt[k].hit / bt[k].n < 0.5);
+  add(20, 'boss türü başına hasar', Object.entries(bt).map(([k, o]) => `${k} ${pct(o.hit / o.n)} saldırısı ulaştı (ort işleyen hasar ${Math.round(o.dealt / o.n)})`).join('; ') || 'boss karşılaşması yok',
+      'her boss türünün saldırısı karşılaşmaların ≥ %50\'sinde ahtapota ulaşmalı (hasar ya da kalkan yutması; Fener Balığı 0 olmasın)', Object.keys(bt).length > 0 && noHit.length === 0);
   return { metrics: M, botStats: S, presence: pres, crowdLv1: lv1, crowdLv3: lv3 };
+}
+
+const avg = a => { const x = a.filter(Number.isFinite); return x.length ? x.reduce((s, v) => s + v, 0) / x.length : NaN; };
+/* w10–20 boss dalgalarında ölenlerin, o dalgaya ulaşanlara oranı */
+function bossDeathMid(std){
+  let reached = 0, died = 0;
+  for(const r of std){
+    for(const w of [10, 15, 20]){
+      const last = r.deathWave != null ? r.deathWave : (r.reachedCap ? 99 : 0);
+      if(last >= w){ reached++; if(r.deathWave === w) died++; }
+    }
+  }
+  return reached ? died / reached : NaN;
 }
 
 function printAccept(res, ctx, elapsedMs){
@@ -226,9 +283,10 @@ async function runAccept(html, gameInfo, opts, log){
   log(`[2/4] ${F1_BOTS.length} bot × ${opts.runs} koşu + hileli ${opts.cheatRuns} koşu`);
   const jobs = [];
   /* uzun koşan botlar önce kuyruğa (yük dengesi) */
-  const order = ['iyi2','yakin','cubuk','kan','mermi','uzun','buyuates','orta','zayif','kotu'].filter(b => F1_BOTS.includes(b));
+  const order = ['iyi2','kontrol','yakin','cubuk','kan','mermi','uzun','buyuates','orta','zayif','kotu'].filter(b => F1_BOTS.includes(b));
   for(let i = 0; i < opts.cheatRuns; i++) jobs.push({ type: 'run', bot: 'orta', i, cheat: true });
   for(const b of order) for(let i = 0; i < opts.runs; i++) jobs.push({ type: 'run', bot: b, i });
+  for(const b of REF_BOTS) for(let i = 0; i < (opts.refRuns || 0); i++) jobs.push({ type: 'run', bot: b, i });
   const all = await runPool(jobs, { html, opts, ratings, workers: opts.workers, onProgress: prog('koşu') });
   const runs = all.filter(r => !r.cheat), cheatRuns = all.filter(r => r.cheat);
   /* sim'den alınmış build: en derine inen orta/iyi2 koşusunun son kadrosu */

@@ -1,6 +1,8 @@
-# Octo-Shooter v2 — Denge ve İçerik Tasarım Dokümanı
+# Octo-Shooter — Denge ve İçerik Tasarım Dokümanı (v2 tasarımı + v3.1 mekanik paketi: bkz. **H**)
 
-Kaynak: `index.html` (2741 satır), tamamı okundu. Sayılar koddan alındı. Bazı değerler ölçüm: oyun kodu değiştirilmeden headless (Node `vm`, DOM stub) çalıştırıldı, dt = 1/60 ile gerçek `updateWave` kullanıldı ve market kararlarını botlar verdi. Botlar ve ölçüm yöntemi F bölümünde.
+**Güncel durum (v3.1):** `index.html` ≈ 5000 satır, 24 silah, 11 tılsım, 12 mutasyon, 9 normal düşman + 4 boss, aktif yetenekler. A–G bölümleri v2 tasarım/ayar tarihçesidir ve kısmen eskidir; güncel kurallar ve sayılar **H bölümünde**. Aşağıdaki ilk paragraf v2 çalışmasının kaynağını anlatır.
+
+Kaynak (v2 çalışması): `index.html` (2741 satır), tamamı okundu. Sayılar koddan alındı. Bazı değerler ölçüm: oyun kodu değiştirilmeden headless (Node `vm`, DOM stub) çalıştırıldı, dt = 1/60 ile gerçek `updateWave` kullanıldı ve market kararlarını botlar verdi. Botlar ve ölçüm yöntemi F bölümünde.
 
 **Süre tanımı:** Tüm dakikalar **1x oyun zamanıdır**: dalga süresi + market süresi. Market süresi ilk 5 dalgada 45 sn, sonrasında 30 sn varsayıldı. 2x/4x hız düğmesi gerçek süreyi 2–4 kat kısaltır; hedef süre 1x içindir. Oyun bitti ekranı oyun zamanını göstermeli.
 
@@ -385,7 +387,8 @@ Bölge geçişinde 2,5 sn banner gösterilir: "🌊 ALACAKARANLIK BÖLGESİ — 
   - **zayıf:** DPS puanına göre açgözlü alım yapar, satış ve yenileme yapmaz.
   - **orta:** Açgözlü alım; tekrar eden türe +8 puan, kopya için Lv1 satar, 2 yenileme (≥14 altın), tılsımları kollar dolunca alır.
   - **iyi2:** En güçlü 10 türe odaklanır, 10 yenileme yapar, Lv2 satabilir.
-  - **Archetype'lar (6):** mermi, büyü-ateş, yakın, çubuk, uzun, kan. Her biri 8 türe odaklanır.
+  - **Archetype'lar (7):** mermi, büyü-ateş, yakın, çubuk, uzun, kan, **kontrol** (v3.1'de eklendi: Kontrol ailesi önceden ölçülmüyordu ve en güçlüsüydü). Her biri 8 türe odaklanır.
+  - **İnsan girdisi modeli (v3.1):** botlar kalkan (`autoShield`: kotu 0, zayıf 0,2, orta 0,2, iyi/archetype 0,8), işaret, kol yerleşimi (Komşu Bağı), Kabuk Onarımı ve Kol Cilası kararlarını modeller; `iyi2n`/`ortan` aynı politika ama kalkan/işaret yok (referans).
 - Mutasyonlarda bot rastgele seçer (kötü/zayıf) ya da sabit öncelik kullanır: hasar > saldırı hızı > can.
 
 ### F2. Metrikler ve hedef aralıklar
@@ -398,14 +401,19 @@ Bölge geçişinde 2,5 sn banner gösterilir: "🌊 ALACAKARANLIK BÖLGESİ — 
 | 5 | kötü bot en erken ölüm | 50 koşunun **hiçbirinde < dalga 8** (≥ 10 dk) |
 | 6 | iyi2 bot medyan | dalga 28–31, ≥ 38 dk |
 | 7 | tüm botlarda en uzun koşu | ≤ dalga 37 (< 52 dk). Üst sınır testi: dalga 15'te 10 kol × Lv4 ve tüm tılsımlar tavanda verilmiş hileli bot da ≤ dalga 38'de ölmeli |
-| 8 | strateji çeşitliliği | 6 archetype'tan **en az 4'ünün medyanı > dalga 20**; en iyi ile en kötü archetype medyan farkı ≤ 5 dalga |
+| 8 | strateji çeşitliliği | 7 archetype'tan **en az 5'inin medyanı > dalga 20**; en iyi ile en kötü archetype medyan farkı ≤ 5 dalga (Kontrol dahil) |
 | 9 | tek silah hakimiyeti | Son dalgada tek silah örneğinin hasar payı: medyan ≤ %35; koşuların ≤ %5'inde > %60; hiçbir koşuda > %75 |
 | 10 | boss ölüm payı | Ölümlerin %15–40'ı boss dalgasında (spike var ama ikili değil) |
 | 11 | silah kullanılabilirliği | Tek silah kalabalık testi (dalga 8, Lv3): her silah ≥ medyanın 0,6 katı. Yeni 5 silah Lv1'de medyanın 0,7–1,3 katı |
 | 12 | dalga süresi (1x) | Normal dalga 40–58 sn, boss dalgası ≤ 75 sn, 90 sn güvencesi koşuların < %2'sinde tetiklenir |
-| 13 | ilerleme | Orta bot dalga 20'de altın harcanacak bir şey buluyor olmalı: market sonunda elde kalan altın medyanı < 40 |
+| 13 | ilerleme | Orta bot dalga 20'de altın harcanacak bir şey buluyor olmalı: market sonunda elde kalan altın medyanı < 40 (v3.1: Kol Cilası + enflasyon + Onar yutakları) |
 | 14 | performans | Dalga 30, orta segment telefon: ≥ 45 fps; aynı anda düşman ≤ 140 (yavrular dahil) |
 | 15 | regresyon | Mevcut 19 silahın her biri en az bir archetype'ın son kadrosunda ≥ %20 koşuda bulunmalı |
+| 16 | tehditsiz dalga payı | w6–20'de (orta, iyi2, archetype'lar) hasarsız **ve** kalkan kullanılmamış dalga payı ≤ %50 (önceki oyun %67–91) |
+| 17 | boss etkisi | w10–20 boss karşılaşmalarında etki (işleyen + kalkanın yuttuğu hasar) medyanı ≥ maks canın %8'i; w10/15/20 boss dalgasında ölüm payı %3–20 |
+| 18 | aktif girdi etkisi | iyi2 (kalkan+işaret) − iyi2n (yok) medyan dalga farkı 0…+3: anlamlı ama zorunlu değil |
+| 19 | hasar kaynağı çeşitliliği | alınan hasarın ilk 3 kaynağı ≤ %60, tek kaynak ≤ %30 (önceki %76 / %36) |
+| 20 | boss türü başına etki | her boss türünün saldırısı karşılaşmaların ≥ %50'sinde ahtapota ulaşır (hasar ya da kalkan yutması); Fener Balığı 0 hasar vermez olmasın |
 
 ### F3. Referans (bu dokümandaki ölçümler)
 - Mevcut oyun: orta 10–11 (14–15 dk). Zayıf ile iyi2 arasında fark ≤ 1 dalga. Boss ölüm payı %20–80 (bota göre).
@@ -550,3 +558,110 @@ bMul = 0.8 + 0.06*(k-1)
 3. **Simülatör–mutasyon entegrasyonu:** Oyunda `MUTATION_STATE` yok. Mutasyon ekranı market üstünde açılıyor ve `startWave` seçilmemiş mutasyonu **rastgele** seçiyor. Sim bunu tanımadığı için bot tercihleri (hasar > hız > can) uygulanmıyor ve `rec.mutations` boş kalıyor (173 koşuda 0 kayıt). Bu ayar rastgele mutasyonlarla yapıldı. Araç `isMutationOpen()`/`mutationChoices` üzerinden seçim yapacak şekilde düzeltilirse orta/iyi2 ~0,5–1 dalga yükselebilir.
 4. **Okçu Balığı hedeflemesi:** `advanceTo 55` ile çözüldü. Yine de okçu jeti tüm geç ölümlerde en büyük tek kaynak. İsteğe bağlı mekanik: silahlar menzildeki uzaktan saldıran düşmanlara (beh `ranged`) en yakından önce öncelik versin.
 5. **Kalabalık testi doygunluğu:** Girdap ve levye gibi alan silahlarında hasarın düşürülmesi, dalga 8 testinde DPS'e zayıf yansıyor (düşman arzı sınırlı). #11 bu silahlar için güvenilir değil; dalga 15 kalabalığıyla ek bir test önerilir.
+
+---
+
+## H. Mekanik paketi v3.1 — aktif girdi, anlam, tempo, denge
+
+Kaynak: denetim raporu (QA + denge) ve görsel brief'inin mekanik kuralları. Hedef: "bug olmasın, denge iyi olsun, oyunda olup anlamı olmayan şey olmasın, oyun her an tetikte tutup oyuncuyu zorlasın". Bu bölüm A–G'nin yerine geçen **güncel kurallardır**; formüller `index.html` ile birebir aynıdır.
+
+### H1. Denetimin bulduğu sorunlar → yapılan
+| sorun (denetim) | çözüm |
+|---|---|
+| Dalga içinde oyuncu girdisi yok | **Kabuk Kalkanı** + **Odak İşareti** (H2) |
+| Kol sırası/yer değiştirme anlamsız | **Komşu Bağı** (H2) |
+| Dalga 1–20'nin %67–91'i sıfır hasar | yakın doğuş, baskın, **Kızışan Sular**, kalıcı hasar, Kement Balığı |
+| Bosslar ahtapota ulaşmıyor; Fener Balığı 0 hasar; köpekbalığı hücumu 104 birim | boss canı/doğuş/zamanlama yeniden ayarı, hücum hızı 330 birim/sn, Fener ışık huzmesi, çağrılar yarım can |
+| Okçu jeti telegrafsız, hasarın %36'sı | 0,45 sn nişan telegrafı + kalkanla savuşma; hasar kaynakları çeşitlendi |
+| Ölü silahlar (taramalı, girdap, buhar, yumruk, testere, vampir) | sayısal buff + vampir yeniden tasarım (maks canın yüzdesi kadar can) |
+| Kontrol ailesi baskın, kürek+levye baskın | Kontrol sinerjisi kısıldı, kürek/levye/kıskaç/mancınık kısıldı, Kontrol archetype'ı F2 #8'e girdi |
+| Çubuk sinerjisi ölçülemiyordu (zararlıydı) | "hafif geri iter" kaldırıldı → **Çubuk silahları +%8 saldırı hızı** |
+| Ölü tılsımlar (Uzun Vantuz, Altın Kesesi), Hazine Avcısı mutasyonu | Vantuz = komşu bağı bonusu, Altın Kesesi = öldürme altını (cila ile harcanır), Hazine Avcısı → **Sığınak** |
+| #13 altın birikmesi (1244 altın, harcanacak yer yok) | **Kol Cilası**, silah fiyat enflasyonu, Kabuk Onarımı |
+| Hatalar B1–B14 | H5 |
+
+### H2. Yeni kurallar
+**Komşu Bağı.** Çemberde yan yana iki kol ortak sınıf paylaşıyorsa her ikisi komşu başına **+%7 hasar** (en çok +%14; boş yuva bağı keser; iki kolluyken tek komşu). `bondInfo(i)`, `bondScore`, `bondMult(i)`; dalga başında `a.bondM`'e işlenir. Markette bağ teal çizgi + "+%7/+%14" rozetiyle görünür, seçili silahın bilgi satırı hangi komşu/sınıf bağladığını yazar. Ölçüm (`exp.js bond`, dalga 20, ölümsüz): en iyi yerleşim en kötüye göre alınan hasarı **×0,82–0,88** yapar.
+
+**Kabuk Kalkanı.** `Q`/`Boşluk` ya da 64 px HUD düğmesi (telefonda alt orta, yatayda sağ alt; bekleme halkası + saniye). Süre **1,0 sn**, bekleme **12 sn** (`12 × (1 − guard) × (Sığınak ? 0,75 : 1)`, alt sınır 7), dalga başında bekleme en çok 6 sn taşınır. Açıkken `hurtPlayer` tüm hasarı (temas, mermi, hücum, mürekkep kör etkisi, Kement ağı) yutar; **ilk yutulan vuruş = savuş**: bekleme **%35 iade**. Yutulan hasarın yarısı Kızışan Sular hesabına yazılır (kalkan kullanmak cezalandırılmasın). Sığınak mutasyonu: bekleme −%25 ve savuşta 110 birim çevredekiler 0,6 sn sersemler. Duraklatılmışken çalışmaz; 2x/4x hızda süre oyun zamanıyla akar (zamanlama zorlaşır; ipucu bunu söylemez, README söyler). İlk dalgada, ilk telegrafta ve ilk savuşta tek seferlik ipucu (`localStorage`).
+
+**Odak İşareti.** Tuvale dokun/tıkla: 24·S birim içindeki en yakın düşman `P.mark`; aynı düşmana tekrar dokunmak kaldırır. Tek hedefli silahlar menzildeyse (ve düşman dokunulmaz değilse) **önce işaretliyi** vurur; koni/nova silahlar nişanı ona çevirir. Teal kesikli halka + beyaz çekirdek. Ücretsiz, sınırsız.
+
+**Telegraf sözleşmesi.** Her saldırı ≥ 0,35 sn önceden görünür: `ph=1` telegraf, `ph=2` eylem (barakuda, köpekbalığı, okçu); `telT` (kalamar, Fener, Kement) kalan telegraf süresi. Çizgi: alarm kırmızısı + beyaz çekirdek; ekran dışı kaynaklar kenar okuyla. Okçu **0,45 sn** nişan çizgisi (atış 2,5 sn döngüsünün parçası: DPS aynı), Kalamar **0,5 sn** 5'li yelpaze (8° aralık, 3 mermi isabet eder, hasar 1,0×), Fener **0,5 sn** 3'lü ışık huzmesi (5 sn'de bir, 0,8×), Kement **0,5 sn** çizgi + kol ucunda halka. Sersemletme telegrafı bozar. Düşman mermisi `eShots.kind` taşır: `water`, `ink`, `light`.
+
+**Düşman/boss değişiklikleri.**
+- Köpekbalığı: hücum 330 birim/sn × 1,2 sn (≈ 400 birim: ahtapota ulaşır), ilk temas 1,5× hasar, bekleme 6 sn. Barakuda: atılma sonrası ilk temas 2× hasar.
+- Boss canı `bMul = 1,0 + 0,6/k + 0,04(k−1)` (k = boss sırası; eski `0,8 + 0,06(k−1)`: erken bosslar daha dayanıklı), ARENA_R'nin %50'sinde doğar (eski %100), dalganın 15. sn'sinde (eski 20.). Boss dalgasında elit yok. Yengeç Kral: hız 20→26, dmg 10→5, can 400→380, çağrılar 4→3 yengeç (**yarım can, %70 hasar**). Kalamar hasarı 0,5→1,0×; Fener Balığı artık ışık huzmesiyle hasar verir.
+- **Kement Balığı** (dalga 8+, ağırlık 3→6): 260'ta durur, 0,5 sn telegraf, rastgele dolu bir kolu **4 sn kilitler** (8 sn arayla), 2 atıştan sonra temasa yaklaşır (dalga kilitlenmesin); öldürülürse kilit çözülür; kalkan açıksa ağ boşa gider. Karşı hamle: Odak İşareti.
+- **Baskın:** dalga ≥ 4 (boss dalgası hariç) 8–16. sn'de, dalga ≥ 12'de ikinci kez 20–26. sn'de: 70° yaydan **1,0 sn telegraflı** `max(4, 0,18·slot)` düşman, ARENA_R·0,6'da doğar; sayı normal bütçeden düşülür.
+- **Yakın doğuş:** her dalganın ilk 4 düşmanı ARENA_R·0,55'te doğar (ilk temas ~17 sn → ~7 sn).
+
+**Kızışan Sular (dinamik zorluk).** Maks canın ≤ %4'ü hasar yiyen (temiz) dalga seviyeyi +1 (en çok 4; seviye tavanı dalga 6–7: 1, 8–10: 2, 11–13: 3, 14+: 4), ≥ %12 hasar yiyen −1; boss dalgası seviyeyi değiştirmez ve düşman çarpanı uygulamaz. Sonraki normal dalgada seviye başına **+%14 düşman, +%8 can, +%15 öldürme altını**. Markette durum paneli + dalga başında banner. Amaç: kusursuz oyuncu da tetikte kalır; riskin altın ödülü vardır.
+
+**Kalıcı hasar + onarım.** Dalga 1–5 sonunda can tamamen dolar; sonra `hp += (maxHp − hp)·0,7 + maxHp·0,08`. **Kabuk Onar:** `6 + 2·dalga` altın = maks canın %25'i, market başına 2 kez. Böylece Vampir, İnci Özü, Kabuk Zırh, Kan Emici anlam kazanır. Vampir: isabet başına **maks canın %0,8'i** (Lv2 %1,2, Lv3 %1,6). Kan Emici: öldürmede maks canın %0,4'ü (elit %2, boss %15).
+
+**Altın yutakları.** *Kol Cilası:* kol başına 6 kademe, kademe başına +%5 hasar, `25 + 20·kademe` altın; birleşmede en yüksek kademe korunur. *Enflasyon:* silah fiyatı dalga 12'den sonra +%4/dalga. *Kabuk Onar* ve tavansız *Derin Deniz İncisi* (+%15 fiyat/alım). Altın Kesesi artık "her düşmandan +%8 altın" (kesirler birikir).
+
+**Zorluk eğrisi (güncel).**
+```js
+function hpMul(w){  return (1 + 0.25*(w-1) + 0.016*(w-1)*(w-1))
+                         * Math.pow(1.07, Math.min(10, Math.max(0, w-18)))   // yumuşak yamaç: dalga 19–28 (eski 19–24 dik, ×1,12)
+                         * Math.pow(1.30, Math.max(0, w-31)); }
+function dmgMul(w){ return (1 + 0.09*(w-1))
+                         * Math.pow(1.045, Math.min(10, Math.max(0, w-18)))
+                         * Math.pow(1.10, Math.max(0, w-31)); }
+function eliteChance(w){ return (w < 10 || w % 5 === 0) ? 0 : Math.min(0.10, 0.04 + 0.004*(w-10)); }
+```
+Doğma tablosu: barakuda dalga 4'ten, okçu 6'dan, Kement 8'den. Düşman hasarları: karides 5, yengeç 10, balon 10, barakuda 7, okçu 2,0 (3→2: telegraf + savuşma ile dengelendi), kaplumbağa 9,5, denizanası 9.
+
+### H3. Sinerji / silah / tılsım / mutasyon değişiklikleri
+| öğe | önce → sonra | gerekçe |
+|---|---|---|
+| Çubuk sinerjisi t1 | "hafif geri iter" → +%8 saldırı hızı | ölçülebilir (`exp.js syn`: alınan hasar ×0,83) |
+| Uzun t1/t2 | yalnız menzil +20/+50 → +%10/+%20 hasar da | etkisizdi (Δ −0,4±3,2) |
+| Büyü t1/t2 | alan +15/+30 → +20/+35 ve Büyü silahlar +%6/+%12 hasar | geride kalıyordu |
+| Ateş t1/t2 | yakma %15/%30 → %25/%40, t1'de Ateş silahlar +%6 | buyuates archetype'ı en geride |
+| Kontrol t1/t2 | süre ×1,5/+%15 → ×1,2/+%12 | baskındı (alınan hasarı 4,4× düşürüyordu) |
+| Yakın t2 | +%35 → +%30 | |
+| taramalı | dmg 3→4,5, ramp tavan 6→10 | ölü |
+| girdap | dmg 7,5→9,5, cd 1,8→1,5, menzil 100→110 | ölü |
+| buhar | dmg 7→9, yavaşlatma %35→%40 | ölü |
+| yumruk 13→19, testere 2,8→3,2, midye 3,0→3,8, diken 12→16, bumerang 9→11, kıskaç 22→24, süluk 14→16 | | ölü/zayıf |
+| vampir | dmg 12,5→19,5; iyileştirme 1 can → maks canın %0,8'i | ölü |
+| kürek 16→13 (stun 0,2→0,14), levye 13→12 (koni 60→55), kıskaç stun 0,25→0,18, mancınık 45→37 (alan 60→70, gecikme 1,0→0,9) | | baskın |
+| Uzun Vantuz | tüm menziller +8 → **komşu bağı +%1/adet (tavan 5)** | +60 menzil ölçülemiyordu (alınan hasar ×0,95–0,99, bazı yapılarda ×1,24); bağ ile bağlı yapılarda ×0,80 (`exp.js trk --base melee`), bağsız yapıda ≈ yok (bilinen sınırlama) |
+| Altın Kesesi | tur başı +3 altın → öldürme altını +%8 | ölüydü |
+| Sedef Pul | −%4 hasar → −%4 hasar **ve** Kalkan beklemesi −%4 | |
+| Kabuk Zırh | +10 → +12 can | |
+| Hazine Avcısı | kaldırıldı → **Sığınak** (Kalkan −%25, savuşta sersemletme) | para fazlasında anlamsızdı |
+| Kitin Deri −%12→−%15; Asit Kan +%60→+%80 | | zayıf mutasyonlar |
+| Kan Emici | +1 can/öldürme → maks canın %0,4'ü | kalıcı hasarla anlamlı |
+| Kartlar | yer yokken alınamayan silah kartı "Yer yok: önce bir silah sat" uyarısı gösterir | "ölü kart" |
+
+### H4. Yeni F2 ölçütleri ve araçlar
+F2 satır 16–20 ve `tools/README.md`: `mech.mjs`, `flow.mjs`, `exp.js`, `analyze.js`; botlar için `autoShield`/`autoMark`/`arrange`/`repair`/`polish`; referans botlar `iyi2n`/`ortan`.
+
+### H5. G0 hata listesi (denetim B1–B14)
+B1 `#dragGhost` pointerId filtresi + hayalet temizliği (ikinci parmak sürüklemeyi bozmaz); B2 HUD düğmeleri ≥ 44 px dokunma alanı (görsel boyut aynı, `::after`); B3 "Başlat" yapışkan üst şeritte (altın/dalga/can ile) + sürüklerken kenara yaklaşınca otomatik kaydırma; B4 yatay telefonda banner altta; B5 rekor eşitliğinde daha hızlı olan geçer; B6 aynı karede son düşman ölüp can bitiyorsa tur kazanılmış sayılır; B7 silahsız dalga başlatılamaz (uyarı); B8 duraklatınca banner süresi akmaz; B9 yeni oyun 1x başlar; B10 ödül + mutasyon mesajı birleşti; B11 bumerang ekran dışına çıksa da silinmez (kol kilitlenmez); B12 `perf.mjs` tavansız tılsımda çökmüyor, `--keep` ile örneklem sabit; B13 `user-scalable=no` kaldırıldı; B14 bu belge. "Trinket" → "Tılsım".
+
+### H6. Sonuçlar (önce / sonra)
+
+Yöntem: `node sim.js --accept --runs 30 --refRuns 20 --noPerf` (bot başına 30 koşu, hileli 20, kalkansız referans 20), 390x844, **iki seed** (1 ve 2), index.html `913ce81bce26`. "Önce" = denetim sırasındaki oyun (`be0c38b0…`, seed 1, 30 koşu).
+
+| bot (medyan ölüm dalgası) | önce | sonra seed 1 | sonra seed 2 |
+|---|---|---|---|
+| kotu | 12 | 10 | 10 |
+| zayif | 13 | 10,5 | 10 |
+| **orta** | 23 | **24** | **23** |
+| **iyi2** | 27 | **32** | **30** |
+| mermi / büyü-ateş / yakın / çubuk / uzun / kan | 24 / 24 / 29 / 28,5 / 24,5 / 25 | 30 / 29,5 / 29,5 / 33 / 29,5 / 30 | 29 / 31 / 29 / 32 / 28 / 28,5 |
+| kontrol (yeni archetype) | (ölçülmüyordu; elle kurulan yapı 30) | 32 | 31,5 |
+| iyi2n / ortan (kalkan+işaret yok) | – | 30 / 21,5 | 29,5 / 20 |
+
+F2: önce 11 GEÇTİ / 3 KALDI / 1 ATLANDI (15 ölçüt) → sonra **seed 1: 13 GEÇTİ / 6 KALDI / 1 ATLANDI, seed 2: 14 GEÇTİ / 5 KALDI / 1 ATLANDI** (20 ölçüt). Yeni ölçütler: #16 tehditsiz dalga %53,2 / **%48,3** (önce ≈ %78: w6–10 %91, w11–15 %75, w16–20 %67), #17 boss etkisi GEÇTİ (medyan maks canın %21,5'i; ulaşma %49–51), #18 aktif girdi GEÇTİ (iyi2 +2 / +0,5, orta +2,5 / +3 dalga), #20 boss türü başına etki GEÇTİ (Fener %100, Kalamar %99, Kral %57, köpekbalığı %77–79; önce Fener 0 hasar).
+
+**Dalga 24–25 duvarı:** güçlü botların (iyi2 + 7 archetype) ölümlerinin %39,5'i dalga 24–25'teydi → seed 1'de **%2,5**, seed 2'de **%3,8**. Ölümler artık dalga 26–34'e yayılıyor (22–30: %57–63, 31–35: %36–43); yeni tepeler dalga 30 (Öfkeli Yengeç Kral, %21) ve 32–33 (polinom + ×1,30 kuyruk). Hasar kaynakları: önce okçu %35,9 + balon %21,0 + kaplumbağa %19,5 = **%76,4**; sonra ilk 3 = **%59–62** (barakuda ≈ %25, okçu %16–20, balon %16–17).
+
+**Silah dağılımı** (son kadroda bulunma % | koşu başına hasar payı %; seed 1): en yüksek pay %10,8 (kürek) → %9,0 (yıldırım); en düşük %1,1 (girdap) → %0,7 (mızrak). Önceki ölü silahlar: taramalı %2,1→3,9, buhar %1,2→3,3, girdap %1,1→1,8, yumruk %1,8→2,3, vampir %3,3→6,7 (kadroda %32→%52), testere %2,1→1,6 (hâlâ düşük). Kürek %10,8→7,5, levye %9,3→7,1, asa %8,1→5,0. Tılsım alım dağılımı değişmedi (hepsi alınıyor; Altın Kesesi 0,2/koşu, İnci ≈ 0 hâlâ nadir).
+
+**Hâlâ KALDI olanlar (dürüst liste):** #3 orta p10/p90 (14,7–18,6 / 27–28: hedef ≥ 17 / ≤ 27; orta bot dalga 10 Yengeç Kral'a bazen takılıyor); #4 zayıf dalga 10–10,5 (hedef 12–15; kötü/zayıf rastgele kurulumlar ilk boss duvarında kalıyor, ölümlerin %50–73'ü boss dalgasında); #11 kalabalık testi (seed 1 GEÇTİ, seed 2'de Lv1 yeni silahlar 1,33–1,53× — 4 tekrarlı testin gürültüsü ±0,3×, `--wtestReps 8` ile geçiyor); #13 orta dalga 20 altın 59–74 (hedef < 40; cila/enflasyon/onar yutaklarına rağmen kalıyor); #16 seed 1'de %53 (hedef ≤ %50); #19 ilk 3 kaynak %60,4–61,7 (hedef ≤ %60; barakuda %25 ile en büyük); #6 seed 1'de iyi2 32 (hedef 28–31). **#14 fps:** 4x CPU kısıtında dalga 30'da ≈ 11 fps (1x: ≈ 46–59 fps); darboğaz çizim (sprite önbelleği grafik işi), mekanik katman fps'i değiştirmedi (önce 14,7 fps ölçüldü: `perf.mjs` düzeltilince).

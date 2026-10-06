@@ -44,6 +44,8 @@ const shot = (page, name) => page.screenshot({ path: path.join(OUT, name + '.png
 const wait = (page, ms) => page.waitForTimeout(ms);
 /* Taşma: kutunun içeriği kutudan büyük mü (kesilen metin) */
 const overflowOf = (page, sel) => page.evaluate(sel => [...document.querySelectorAll(sel)].filter(e => e.offsetParent)
+  /* HUD düğmelerinin görünmez dokunma alanı (::after) taşma sayılmaz */
+  .filter(e => !(getComputedStyle(e, '::after').content !== 'none' && /^btn(Pause|Speed|Nums)$/.test(e.id)))
   .map(e => ({ t: (e.textContent || '').trim().slice(0, 40), sw: e.scrollWidth, cw: e.clientWidth, sh: e.scrollHeight, ch: e.clientHeight,
               r: e.getBoundingClientRect().right }))
   .filter(o => o.sw > o.cw + 1 || o.sh > o.ch + 1), sel);
@@ -51,10 +53,12 @@ const overflowOf = (page, sel) => page.evaluate(sel => [...document.querySelecto
 async function stage(page, wave, opts = {}){
   await page.evaluate(({ wave, keepArms }) => {
     P.wave = wave; P.maxHp = P.hp = 1e9;
-    if(!keepArms) P.arms = P.arms.map(() => null);
+    /* silahsız dalga başlatılamaz (oyun uyarır): tek "sustuğu" kol bırak — bekleme süresi dev, ateş etmez */
+    if(!keepArms){ P.arms = P.arms.map(() => null); P.arms[0] = { type: 'tabanca', lv: 1, cdT: 0, aim: 0, uid: newUid('tabanca') }; }
     startWave();
     /* sahte uzak-gelecek kuyruk öğesi: düşman listesi boşalsa da dalga bitmesin */
-    spawnQueue = [{ t: 1e9, type: 'karides' }]; spawnIdx = 0; bossSpawned = true;
+    spawnQueue = [{ t: 1e9, type: 'karides' }]; spawnIdx = 0; bossSpawned = true; flankList = [];
+    if(!keepArms) P.arms[0].cdT = 1e12;
   }, { wave, keepArms: !!opts.keepArms });
 }
 async function place(page, list){
@@ -184,10 +188,9 @@ sections[3] = async vp => {
   await page.evaluate(() => { for(let i = 0; i < shopCards.length; i++) buyCard(i); });
   ovf = await overflowOf(page, '#trkList .trkChip, #trkList .trkTx');
   note(3, vp, !ovf.length, `tılsım çipleri taşma: ${ovf.length ? JSON.stringify(ovf) : 'yok'}`);
-  /* reroll ücreti (hazine perk'i ile 1) */
-  const rr = await page.evaluate(() => { const a = document.getElementById('btnReroll').textContent; P.perks.push('hazine'); renderShop();
-    const b = document.getElementById('btnReroll').textContent; const g0 = P.gold; document.getElementById('btnReroll').click(); const paid = g0 - P.gold; P.perks.pop(); renderShop(); return { a, b, paid }; });
-  note(3, vp, /2/.test(rr.a) && /1/.test(rr.b) && rr.paid === 1, `reroll: normal "${rr.a}", hazine "${rr.b}", ödenen ${rr.paid}`);
+  /* reroll ücreti sabit 2 (Hazine Avcısı kaldırıldı → Sığınak) */
+  const rr = await page.evaluate(() => { const a = document.getElementById('btnReroll').textContent; const g0 = P.gold; document.getElementById('btnReroll').click(); const paid = g0 - P.gold; renderShop(); return { a, paid, hz: !!MUT_BY_ID.hazine, sg: !!MUT_BY_ID.siginak }; });
+  note(3, vp, /2/.test(rr.a) && rr.paid === 2 && !rr.hz && rr.sg, `reroll: "${rr.a}", ödenen ${rr.paid}; hazine yok=${!rr.hz}, siginak var=${rr.sg}`);
   /* Lv4: dalga 14'te ve 16'da Lv3+Lv3 */
   const lv = await page.evaluate(() => {
     const r = {};
@@ -244,7 +247,7 @@ sections[4] = async vp => {
   await wait(page, 600);
   const h1 = await page.evaluate(() => ({ l: document.getElementById('hudTimeLbl').textContent, v: document.getElementById('hudTime').textContent }));
   note(4, vp, h1.l === '⏳' && +h1.v > 0, `dalga başı sayaç: "${h1.l} ${h1.v}"`);
-  await page.evaluate(() => { P.arms = P.arms.map(() => null); spawnIdx = spawnQueue.length; if(!enemies.length) spawnEnemy('yengec', {}); });
+  await page.evaluate(() => { P.arms = P.arms.map(() => null); P.arms[0] = { type: 'tabanca', lv: 1, cdT: 1e12, aim: 0, uid: newUid('tabanca') }; spawnIdx = spawnQueue.length; flankList = []; if(!enemies.length) spawnEnemy('yengec', {}); });
   await wait(page, 200);
   const h2 = await page.evaluate(() => ({ l: document.getElementById('hudTimeLbl').textContent, v: document.getElementById('hudTime').textContent, n: enemies.length }));
   note(4, vp, h2.l === 'KALAN' && +h2.v === h2.n, `doğum bitti: "${h2.l} ${h2.v}" (düşman ${h2.n})`);

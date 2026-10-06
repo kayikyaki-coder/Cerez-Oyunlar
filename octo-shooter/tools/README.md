@@ -4,25 +4,33 @@
 
 | Dosya | Ne yapar | Bağımlılık |
 |---|---|---|
-| `sim.js` | Headless denge simülatörü (CLI). Normal özet, **`--accept` (DESIGN.md F2, 15 metrik)**, `--cheat`, `--wtest` | Yok (Node 22) |
+| `sim.js` | Headless denge simülatörü (CLI). Normal özet, **`--accept` (DESIGN.md F2, 20 metrik)**, `--cheat`, `--wtest` | Yok (Node 22) |
 | `lib/game.js` | index.html → `node:vm` (sahte DOM/canvas, seed'li `Math.random`, köprü script'i) | |
-| `lib/bots.js` | F1 botları (kotu, zayif, orta, iyi2, 6 archetype) + eski botlar, mutasyon seçimi | |
+| `lib/bots.js` | F1 botları (kotu, zayif, orta, iyi2, **7** archetype: +kontrol) + referans botlar (`iyi2n`, `ortan`: kalkan/işaret yok) + deney botları (`iyi2s`, `iyi2m`) + eski botlar, mutasyon seçimi, **`makeInputBot`** (autoShield/autoMark), **`arrange`** (Komşu Bağı yerleşimi), **`repairTo`** (Kabuk Onarımı) | |
 | `lib/run.js` | Tek koşu, hileli bot kurulumu, tek silah kalabalık testi, düşman zirve testi | |
 | `lib/pool.js`, `lib/worker.js` | `worker_threads` havuzu (iş çekme, yük dengeli) | |
 | `lib/ratings.js` | Botların silah puanı (oyunun içinde ölçülür, `.cache/` altına yazılır) | |
 | `lib/accept.js` | F2 metrikleri → GEÇTİ/KALDI tablosu | |
-| `perf.mjs` | F2 #14: Playwright ile dalga N'de fps (1x ve kısıtlı CPU) | `playwright` |
+| `exp.js` | Sabit-yapı deneyleri (bot yok): `syn` (sınıf sinerjisi aç/kapa), `bond` (Komşu Bağı en iyi/en kötü yerleşim), `trk` (tılsım etkisi) | Yok |
+| `analyze.js` | `sim.js --json` çıktısı: bot başına medyan/tehditsiz dalga/savuş, alınan hasar kaynakları, boss kaydı, silah seçilme + hasar payı, tılsım alımı (iki dosya = önce/sonra) | Yok |
+| `perf.mjs` | F2 #14: Playwright ile dalga N'de fps (1x ve kısıtlı CPU); `--keep N` ekranda N düşman tutar; tavansız tılsımda (`inci`) artık çökmez | `playwright` |
 | `smoke.mjs` | Tarayıcı smoke testi (telefon + masaüstü) | `playwright` |
+| `mech.mjs` | **Mekanik testi** (masaüstü + telefon dikey/yatay): Komşu Bağı, Kabuk Kalkanı (klavye/dokunma, bekleme, savuş %35 iade, duraklat/2x), Odak İşareti, telegraflar, Kement, baskın, onarım, Kızışan Sular, 44 px dokunma hedefleri, yapışkan Başlat | `playwright` |
+| `flow.mjs` | **Gerçek akış testi** (masaüstü, telefon dikey/yatay, 320 px): market → sürükle-bırak → onar → dalga → kalkan/işaret → 4x gerçek dalgalar → boss + mutasyon → oyun bitti → rekor → yeniden başlat; konsol hatası, yatay taşma, kare süresi | `playwright` |
 | `qa.mjs` | Görsel/UX kalite kontrolü: düşman/boss sahneleri, mutasyon, market, HUD/banner/rekor, döndürme, metin taraması → `shots/qa/` + `qa-log.json` (`--only 1,3`) | `playwright` |
 
 ```bash
-cd octo-shooter/tools
+cd octo-shooter/tools            # (Playwright araçları için önce başka bir klasöre kopyalayıp orada npm install)
 npm install                                   # yalnız playwright (tarayıcı indirmez)
-node sim.js --accept                          # F2 kabul tablosu (bot başına 50 koşu)
+node sim.js --accept                          # F2 kabul tablosu (20 metrik; bot başına 50 koşu, kalkansız referans 16 koşu)
 node sim.js --runs 50 --strategy all --json out.json    # normal özet
 node smoke.mjs                                # smoke testi
+node mech.mjs                                 # mekanik testi (bağ, kalkan, işaret, telegraf, Kement, baskın, onarım, cila, G0 hataları)
+node flow.mjs                                 # gerçek akış: market → dalga → boss → mutasyon → oyun bitti → yeniden başlat (4 görünüm)
+node exp.js syn|bond|trk                      # sabit-yapı deneyleri
+node analyze.js out.json [eski.json]          # sim --json çıktısı özeti / önce-sonra
 ```
-`playwright install` **çalıştırmayın**; Chromium `/opt/pw-browsers` altında hazır.
+`playwright install` **çalıştırmayın**; Chromium `/opt/pw-browsers` altında hazır. **Repo içinde `npm install` etmeyin**: `tools/` klasörünü geçici bir yere kopyalayıp orada kurun (`node_modules` repoya girmesin).
 
 ---
 
@@ -48,17 +56,25 @@ Adımlar (her biri worker havuzunda paralel):
 | 5 | `kotu` en erken ölüm dalgası ≥ 8 **ve** en kısa süre ≥ 10 dk | |
 | 6 | `iyi2` medyan dalga 28–31 ve medyan süre ≥ 38 dk | |
 | 7 | Tüm F1 botlarında en uzun koşu ≤ 37 dalga ve < 52 dk; **hileli bot**: dalga `--cheatWave` (15) başında tüm tılsımlar tavanda (Ek Kol dahil → 10 kol), tüm kollar `--cheatLv` (4) ile en yüksek puanlı farklı türlerle dolu, sonra `orta` gibi oynar; en uzun koşu ≤ 38 | `node sim.js --cheat --runs 20` ayrı mod |
-| 8 | 6 archetype medyanı: ≥4'ü > 20 ve en iyi–en kötü ≤ 5 | |
+| 8 | **7** archetype (+Kontrol) medyanı: ≥5'i > 20 ve en iyi–en kötü ≤ 5 | Kontrol ailesi artık ölçülüyor (denetimde ölçülmüyordu ve en güçlüsüydü) |
 | 9 | Her koşunun **son** dalgasında (ölünen dalga) en çok hasar veren silah **örneğinin** (uid) payı; tüm F1 koşuları | medyan / >%60 oranı / maks |
 | 10 | F1 botlarının tüm ölümleri içinde ölüm dalgası 5'in katı olanların oranı | "boss canlıyken ölüm" ayrıca bilgi olarak |
 | 11 | Kalabalık testi (dalga 8): Lv3 DPS ≥ 0,6×medyan; ilk 19 dışındaki (yeni) silahlar Lv1'de 0,7–1,3×medyan | `node sim.js --wtest` ayrı mod (Lv1–3 tablosu); dalga 15 varyantı için `--wtestWave 15` (varsayılan 8) |
 | 12 | Normal = boss dışı, w≥3, **tamamlanan** dalgaların süre medyanı 40–58 sn; boss dalgası süresi p95 ≤ 75 sn; herhangi bir dalgası > 90 sn süren koşu oranı < %2 | 90 sn güvencesinin "tetiklenmesi" süreden ölçülür |
-| 13 | `orta` botunun dalga 20 marketinden sonra elde kalan altın medyanı < 40 | orta 20'ye ulaşmazsa "ölçülemedi" → KALDI |
+| 13 | `orta` botunun dalga 20 marketinden sonra elde kalan altın medyanı < 40 | orta 20'ye ulaşmazsa "ölçülemedi" → KALDI. **Altın yutakları** (Kol Cilası, enflasyon, Onar) eklenince bot da harcıyor; eski "1244 altın" sorunu bot politikası değil, oyunda harcanacak yer olmamasıydı |
 | 14 | fps: `perf.mjs`, 390x844 DPR2, dalga 30, ölümsüz, 20 sn; **4x CPU kısıtlaması** ile ölçülen fps ≥ 45. Düşman: headless zirve testi ≤ 140 | fps kaba; bkz. sınırlamalar |
 | 15 | İlk 19 silahın her biri için: en az bir archetype'ın koşularının ≥ %20'sinde son kadroda (kollarda) var mı | |
+| 16 | **Tehditsiz dalga payı** (orta, iyi2, 7 archetype; w6–20; ölünen dalga hariç): hasar yok **ve** kalkan kullanılmadı → ≤ %50 | önceki oyun ≈ %67–91 |
+| 17 | **Boss etkisi** (w10–20 boss karşılaşmaları): ahtapota verdiği hasar medyanı ≥ maks canın %8'i **ve** w10/15/20 boss-dalga ölüm payı %5–20 | "ulaşma oranı" yalnız bilgi (Kalamar/Fener menzilden vurur) |
+| 18 | **Aktif girdi etkisi**: iyi2 (kalkan 0,8 + işaret) − iyi2n (kalkansız) medyan dalga farkı 0…+3 | `--refRuns` (varsayılan 20; 0 = atla). Orta/ortan farkı da yazılır |
+| 19 | **Hasar kaynağı çeşitliliği**: ilk 3 kaynak ≤ %60, tek kaynak ≤ %30 | önceki oyun %76 / %36 (okçu) |
+| 20 | **Boss türü başına hasar**: her boss türü karşılaşmaların ≥ %50'sinde ahtapota hasar vermeli | Fener Balığı 0 hasar veriyordu |
 
 Süre = Σ gerçek dalga süresi (1x) + market süresi (dalga 1–5 için 45 sn, sonrası 30 sn; `--shopEarly/--shopLate/--shopEarlyUntil`).
 Mutasyon ekranı için ek süre eklenmez.
+
+## Son kabul sonuçları (v3.1)
+`--accept --runs 30 --refRuns 20 --noPerf`, iki seed: seed 1 **13 GEÇTİ / 6 KALDI / 1 ATLANDI**, seed 2 **14 / 5 / 1** (20 ölçüt). Ayrıntılar, önce/sonra tabloları ve KALDI listesi DESIGN.md H6'da. Tam koşu ≈ 23 dk (4 çekirdek, 390 koşu).
 
 ## Botlar (DESIGN.md F1)
 
@@ -70,10 +86,17 @@ katlanan fiyatlı (`grow` alanlı, örn. tavansız "inci") tılsımlarda statik 
 diğer tüm tılsımlar zaten tavandayken (harcanacak başka bir şey kalmayınca) alır — aksi halde sonsuza kadar
 altın yutup #13 gibi metrikleri anlamsızlaştırırdı.
 
-**Bilinen ayrı sorun (bu oturumda dokunulmadı):** `orta` botu dalga 20'de medyan ~1200 altın biriktiriyor
-(hedef < 40). `git stash` ile bu oturumdan önceki koda dönülerek doğrulandı — aynı büyüklükte birikim zaten
-vardı, yani tılsım/fiyat düzeltmesinin yan etkisi değil; muhtemelen oyunun altın ekonomisi (kazanç oranı)
-zamanla artmış ve bot harcama mantığı/eski `< 40` hedefi buna göre değil. Geliştiriciye bildirilmeli.
+**#13 (altın birikmesi) çözüldü:** `orta` botunun dalga 20'de ~1200 altın taşıması bot politikası değil, oyunda harcanacak
+yer kalmamasıydı. Artık altın yutakları var (Kol Cilası: kol başına 5 kademe +%6 hasar; silah fiyat enflasyonu dalga 12'den
+sonra +%4/dalga; Kabuk Onarımı; tavansız İnci) ve botlar cila/onarım alıyor; dalga 20'de elde kalan altın ≈ 40–70.
+
+**İnsan girdisi modeli (autoShield / autoMark / arrange / repair / polish):** gerçek oyunda dalga içi girdi (kalkan, işaret) ve
+market kararları (kol yerleşimi, onarım, cila) botların sonuçlarını etkiler; botlar bunları puanlı biçimde modeller:
+- `shield` (0–1): büyük (≥ maks canın %4'ü) ve telegraflı/uçan bir hasar ya da ahtapota yapışmış düşmanın sonraki vuruşu 0,55 sn içinde çarpacaksa o tehdit için **bir kez** bu olasılıkla `useShield()` basar; can < %40 iken saniyede ≈ shield/2 panik basışı. kotu 0, zayif 0,2, orta 0,2, iyi/archetype 0,8.
+- `mark`: yalnız menzildeki **Kement Balığı**'nı işaretler (iyi/archetype). Boss/elit işaretlemek denendi: sürüyü ihmal ettirip medyanı 2–3 dalga düşürdü (`iyi2m`); gerçek oyuncuda bu bir karardır, bota bırakılmadı. Orta işaret kullanmaz.
+- `arrange`: market sonunda kol çiftlerini takas eden tırmanışla Komşu Bağı sayısını artırır (iyi/archetype; orta yerleştirmez).
+- `repair`: can eşiğin altındaysa (orta 0,5; iyi 0,65; zayif 0,3) Kabuk Onar basar. `polish`: artan altınla en güçlü kolların cilasını alır.
+- Referans botlar `iyi2n` / `ortan`: aynı politika ama kalkan/işaret yok → F2 #18 aktif girdinin etkisini ölçer. `iyi2s` (yalnız kalkan), `iyi2m` (yalnız işaret) deney içindir.
 
 - **Silah puanı** = √(tahmini tek hedef DPS × ölçülen kalabalık DPS Lv1), karekök sıkıştırmalı, medyan 18
   (tasarımcı tablosunun ≈6–20 yayılımına yakın). Yeni silah eklenince ya da sayılar değişince kendiliğinden güncellenir.
@@ -92,7 +115,8 @@ zamanla artmış ve bot harcama mantığı/eski `< 40` hedefi buna göre değil.
 | `zayif` | Puana göre açgözlü alım, satış/yenileme yok; mutasyon rastgele |
 | `orta` | Açgözlü; tekrar eden türe +8, kopya için Lv1 satar, 2 yenileme (≥14 altın), tılsımları kollar dolunca |
 | `iyi2` | En güçlü 10 türe odak (+25), 10 yenileme (≥6 altın), Lv2 satabilir |
-| `mermi, buyuates, yakin, cubuk, uzun, kan` | `iyi` ayarları + 8 türe odak, 6 yenileme |
+| `mermi, buyuates, yakin, cubuk, uzun, kan, kontrol` | `iyi` ayarları + 8 türe odak, 6 yenileme (**kontrol** yeni: Kontrol sınıfı 8 tür) |
+| `iyi2n`, `ortan` | referans: kalkan/işaret kullanmayan eşler |
 | eski: `random, focus, greedy, trinket` | ilk sürümdeki botlar (`--strategy legacy`) |
 
 **Mutasyon seçimi:** `kotu`/`zayif` rastgele; diğerleri hasar > saldırı hızı > can (`basinc` > `refleks` > `ucYurek`;
@@ -154,8 +178,8 @@ Build verilmezse en pahalı 10 tür Lv3 ve tüm tılsımlar tavanda. Çıktını
 
 4 çekirdekte, 1/60 adımla. Koşu maliyeti ulaşılan dalgayla hızla artar, çünkü oyunun `nearestEnemy` döngüsü
 kol × düşman kadar döner.
-- Mevcut eğride (ölüm ≈ dalga 10–13) `--accept` ≈ 6–8 dk.
-- DESIGN B eğrisinde (ölüm ≈ 23–29) bot başına 50 koşu ≈ 30–40 dk.
+- Güncel eğride (güçlü botlar ölüm ≈ dalga 28–33): `--accept --runs 30 --refRuns 20 --noPerf` ≈ 23 dk (390 koşu, 4 çekirdek).
+- Hızlı ayar için `node sim.js --runs 16 --strategy orta,iyi2,... --maxWave 21` (boss/yakın dalga ayarı) ya da `--maxWave 14` (zayıf botlar) birkaç dakikada biter.
 
 Hızlı kontrol için `--runs 20` ya da `--fps 30` kullanılabilir. `--fps 30` sonuçları hafifçe kaydırır.
 
