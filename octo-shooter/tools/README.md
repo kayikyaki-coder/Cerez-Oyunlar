@@ -73,6 +73,9 @@ Adımlar (her biri worker havuzunda paralel):
 Süre = Σ gerçek dalga süresi (1x) + market süresi (dalga 1–5 için 45 sn, sonrası 30 sn; `--shopEarly/--shopLate/--shopEarlyUntil`).
 Mutasyon ekranı için ek süre eklenmez.
 
+## Son kabul sonuçları (v3.1)
+`--accept --runs 30 --refRuns 20 --noPerf`, iki seed: seed 1 **13 GEÇTİ / 6 KALDI / 1 ATLANDI**, seed 2 **14 / 5 / 1** (20 ölçüt). Ayrıntılar, önce/sonra tabloları ve KALDI listesi DESIGN.md H6'da. Tam koşu ≈ 23 dk (4 çekirdek, 390 koşu).
+
 ## Botlar (DESIGN.md F1)
 
 Tasarımcının `bots.js` politikası taşındı. **Tek fark:** statik `RATING` tablosu yerine puan oyundan ölçülür.
@@ -175,8 +178,8 @@ Build verilmezse en pahalı 10 tür Lv3 ve tüm tılsımlar tavanda. Çıktını
 
 4 çekirdekte, 1/60 adımla. Koşu maliyeti ulaşılan dalgayla hızla artar, çünkü oyunun `nearestEnemy` döngüsü
 kol × düşman kadar döner.
-- Mevcut eğride (ölüm ≈ dalga 10–13) `--accept` ≈ 6–8 dk.
-- DESIGN B eğrisinde (ölüm ≈ 23–29) bot başına 50 koşu ≈ 30–40 dk.
+- Güncel eğride (güçlü botlar ölüm ≈ dalga 28–33): `--accept --runs 30 --refRuns 20 --noPerf` ≈ 23 dk (390 koşu, 4 çekirdek).
+- Hızlı ayar için `node sim.js --runs 16 --strategy orta,iyi2,... --maxWave 21` (boss/yakın dalga ayarı) ya da `--maxWave 14` (zayıf botlar) birkaç dakikada biter.
 
 Hızlı kontrol için `--runs 20` ya da `--fps 30` kullanılabilir. `--fps 30` sonuçları hafifçe kaydırır.
 

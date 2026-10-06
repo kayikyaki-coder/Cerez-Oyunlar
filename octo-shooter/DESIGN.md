@@ -643,3 +643,25 @@ F2 satır 16–20 ve `tools/README.md`: `mech.mjs`, `flow.mjs`, `exp.js`, `analy
 
 ### H5. G0 hata listesi (denetim B1–B14)
 B1 `#dragGhost` pointerId filtresi + hayalet temizliği (ikinci parmak sürüklemeyi bozmaz); B2 HUD düğmeleri ≥ 44 px dokunma alanı (görsel boyut aynı, `::after`); B3 "Başlat" yapışkan üst şeritte (altın/dalga/can ile) + sürüklerken kenara yaklaşınca otomatik kaydırma; B4 yatay telefonda banner altta; B5 rekor eşitliğinde daha hızlı olan geçer; B6 aynı karede son düşman ölüp can bitiyorsa tur kazanılmış sayılır; B7 silahsız dalga başlatılamaz (uyarı); B8 duraklatınca banner süresi akmaz; B9 yeni oyun 1x başlar; B10 ödül + mutasyon mesajı birleşti; B11 bumerang ekran dışına çıksa da silinmez (kol kilitlenmez); B12 `perf.mjs` tavansız tılsımda çökmüyor, `--keep` ile örneklem sabit; B13 `user-scalable=no` kaldırıldı; B14 bu belge. "Trinket" → "Tılsım".
+
+### H6. Sonuçlar (önce / sonra)
+
+Yöntem: `node sim.js --accept --runs 30 --refRuns 20 --noPerf` (bot başına 30 koşu, hileli 20, kalkansız referans 20), 390x844, **iki seed** (1 ve 2), index.html `913ce81bce26`. "Önce" = denetim sırasındaki oyun (`be0c38b0…`, seed 1, 30 koşu).
+
+| bot (medyan ölüm dalgası) | önce | sonra seed 1 | sonra seed 2 |
+|---|---|---|---|
+| kotu | 12 | 10 | 10 |
+| zayif | 13 | 10,5 | 10 |
+| **orta** | 23 | **24** | **23** |
+| **iyi2** | 27 | **32** | **30** |
+| mermi / büyü-ateş / yakın / çubuk / uzun / kan | 24 / 24 / 29 / 28,5 / 24,5 / 25 | 30 / 29,5 / 29,5 / 33 / 29,5 / 30 | 29 / 31 / 29 / 32 / 28 / 28,5 |
+| kontrol (yeni archetype) | (ölçülmüyordu; elle kurulan yapı 30) | 32 | 31,5 |
+| iyi2n / ortan (kalkan+işaret yok) | – | 30 / 21,5 | 29,5 / 20 |
+
+F2: önce 11 GEÇTİ / 3 KALDI / 1 ATLANDI (15 ölçüt) → sonra **seed 1: 13 GEÇTİ / 6 KALDI / 1 ATLANDI, seed 2: 14 GEÇTİ / 5 KALDI / 1 ATLANDI** (20 ölçüt). Yeni ölçütler: #16 tehditsiz dalga %53,2 / **%48,3** (önce ≈ %78: w6–10 %91, w11–15 %75, w16–20 %67), #17 boss etkisi GEÇTİ (medyan maks canın %21,5'i; ulaşma %49–51), #18 aktif girdi GEÇTİ (iyi2 +2 / +0,5, orta +2,5 / +3 dalga), #20 boss türü başına etki GEÇTİ (Fener %100, Kalamar %99, Kral %57, köpekbalığı %77–79; önce Fener 0 hasar).
+
+**Dalga 24–25 duvarı:** güçlü botların (iyi2 + 7 archetype) ölümlerinin %39,5'i dalga 24–25'teydi → seed 1'de **%2,5**, seed 2'de **%3,8**. Ölümler artık dalga 26–34'e yayılıyor (22–30: %57–63, 31–35: %36–43); yeni tepeler dalga 30 (Öfkeli Yengeç Kral, %21) ve 32–33 (polinom + ×1,30 kuyruk). Hasar kaynakları: önce okçu %35,9 + balon %21,0 + kaplumbağa %19,5 = **%76,4**; sonra ilk 3 = **%59–62** (barakuda ≈ %25, okçu %16–20, balon %16–17).
+
+**Silah dağılımı** (son kadroda bulunma % | koşu başına hasar payı %; seed 1): en yüksek pay %10,8 (kürek) → %9,0 (yıldırım); en düşük %1,1 (girdap) → %0,7 (mızrak). Önceki ölü silahlar: taramalı %2,1→3,9, buhar %1,2→3,3, girdap %1,1→1,8, yumruk %1,8→2,3, vampir %3,3→6,7 (kadroda %32→%52), testere %2,1→1,6 (hâlâ düşük). Kürek %10,8→7,5, levye %9,3→7,1, asa %8,1→5,0. Tılsım alım dağılımı değişmedi (hepsi alınıyor; Altın Kesesi 0,2/koşu, İnci ≈ 0 hâlâ nadir).
+
+**Hâlâ KALDI olanlar (dürüst liste):** #3 orta p10/p90 (14,7–18,6 / 27–28: hedef ≥ 17 / ≤ 27; orta bot dalga 10 Yengeç Kral'a bazen takılıyor); #4 zayıf dalga 10–10,5 (hedef 12–15; kötü/zayıf rastgele kurulumlar ilk boss duvarında kalıyor, ölümlerin %50–73'ü boss dalgasında); #11 kalabalık testi (seed 1 GEÇTİ, seed 2'de Lv1 yeni silahlar 1,33–1,53× — 4 tekrarlı testin gürültüsü ±0,3×, `--wtestReps 8` ile geçiyor); #13 orta dalga 20 altın 59–74 (hedef < 40; cila/enflasyon/onar yutaklarına rağmen kalıyor); #16 seed 1'de %53 (hedef ≤ %50); #19 ilk 3 kaynak %60,4–61,7 (hedef ≤ %60; barakuda %25 ile en büyük); #6 seed 1'de iyi2 32 (hedef 28–31). **#14 fps:** 4x CPU kısıtında dalga 30'da ≈ 11 fps (1x: ≈ 46–59 fps); darboğaz çizim (sprite önbelleği grafik işi), mekanik katman fps'i değiştirmedi (önce 14,7 fps ölçüldü: `perf.mjs` düzeltilince).
