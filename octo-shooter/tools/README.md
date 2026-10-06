@@ -89,9 +89,9 @@ sonra +%4/dalga; Kabuk Onarımı; tavansız İnci) ve botlar cila/onarım alıyo
 
 **İnsan girdisi modeli (autoShield / autoMark / arrange / repair / polish):** gerçek oyunda dalga içi girdi (kalkan, işaret) ve
 market kararları (kol yerleşimi, onarım, cila) botların sonuçlarını etkiler; botlar bunları puanlı biçimde modeller:
-- `shield` (0–1): büyük (≥ maks canın %4'ü) ve telegraflı/uçan bir hasar 0,55 sn içinde çarpacaksa o tehdit için **bir kez** bu olasılıkla `useShield()` basar; can < %40 iken saniyede ≈ shield/2 panik basışı. kotu 0, zayif 0,2, orta 0,5, iyi/archetype 0,8.
-- `mark`: menzildeki Kement > boss > elit hedefi işaretler (orta ve üstü).
-- `arrange`: market sonunda kol çiftlerini takas eden tırmanışla Komşu Bağı sayısını artırır (orta ve üstü).
+- `shield` (0–1): büyük (≥ maks canın %4'ü) ve telegraflı/uçan bir hasar ya da ahtapota yapışmış düşmanın sonraki vuruşu 0,55 sn içinde çarpacaksa o tehdit için **bir kez** bu olasılıkla `useShield()` basar; can < %40 iken saniyede ≈ shield/2 panik basışı. kotu 0, zayif 0,2, orta 0,2, iyi/archetype 0,8.
+- `mark`: yalnız menzildeki **Kement Balığı**'nı işaretler (iyi/archetype). Boss/elit işaretlemek denendi: sürüyü ihmal ettirip medyanı 2–3 dalga düşürdü (`iyi2m`); gerçek oyuncuda bu bir karardır, bota bırakılmadı. Orta işaret kullanmaz.
+- `arrange`: market sonunda kol çiftlerini takas eden tırmanışla Komşu Bağı sayısını artırır (iyi/archetype; orta yerleştirmez).
 - `repair`: can eşiğin altındaysa (orta 0,5; iyi 0,65; zayif 0,3) Kabuk Onar basar. `polish`: artan altınla en güçlü kolların cilasını alır.
 - Referans botlar `iyi2n` / `ortan`: aynı politika ama kalkan/işaret yok → F2 #18 aktif girdinin etkisini ölçer. `iyi2s` (yalnız kalkan), `iyi2m` (yalnız işaret) deney içindir.
 

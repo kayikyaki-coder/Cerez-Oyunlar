@@ -135,7 +135,7 @@ function makeHelpers(A, rng, rec, ratings){
       const pa = A.fn('polishArm'), pc = A.fn('polishCost');
       if(typeof pa !== 'function') return;
       for(let guard = 0; guard < 80; guard++){
-        const arms = H.armItems().filter(x => (x.it.pol || 0) < 5)
+        const arms = H.armItems().filter(x => (x.it.pol || 0) < 6)
           .sort((a, b) => H.estDps(H.W()[b.it.type], b.it.lv) - H.estDps(H.W()[a.it.type], a.it.lv) || (a.it.pol||0) - (b.it.pol||0));
         const x = arms.find(y => y.it.lv >= 2) || arms[0];
         if(!x || H.gold() < pc(x.it) + reserve) break;
@@ -397,7 +397,7 @@ const POL = {};
 POL.kotu  = { name:'kotu', shield:0, mark:false, arrange:false, repair:0, randomWeapons:true, randomTrinkets:true, randomMutation:true, dupBonus:0, sell:false,
               rerolls:0, rerollMin:99, trk:TR.base, goldUntil:0,
               desc:'Rastgele silah, %30 rastgele tılsım, satış/yenileme yok, sadece otomatik birleştirme' };
-POL.orta  = { name:'orta', shield:0.5, mark:true, arrange:true, repair:0.5, polish:true, polishReserve:0, dupBonus:8, sell:true, sellLv2:false, rerolls:2, rerollMin:14, trk:TR.base, goldUntil:5,
+POL.orta  = { name:'orta', shield:0.2, mark:false, arrange:false, repair:0.5, polish:true, polishReserve:20, dupBonus:8, sell:true, sellLv2:false, rerolls:2, rerollMin:14, trk:TR.base, goldUntil:5,
               desc:'Açgözlü puan; tekrar eden türe +8, kopya için Lv1 satar, 2 yenileme (≥14💰), tılsım kollar dolunca' };
 POL.zayif = Object.assign({}, POL.orta, { name:'zayif', shield:0.2, mark:false, arrange:false, repair:0.3, polish:false, dupBonus:0, sell:false, rerolls:0, rerollMin:99, goldUntil:0,
               randomMutation:true, desc:'Puana göre açgözlü alım, satış/yenileme yok' });

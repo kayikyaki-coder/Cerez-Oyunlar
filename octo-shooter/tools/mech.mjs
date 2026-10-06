@@ -200,12 +200,12 @@ async function run(browser, cfg){
   /* --- G0 hata düzeltmeleri: bumerang kilidi, aynı karede ölüm+bitiş, rekor eşitliği, silahsız başlatma --- */
   const boom = await page.evaluate(() => {
     state = WAVE_STATE; enemies = []; projectiles = []; effects = []; eShots = []; flankList = []; paused = false;
-    P.hp = P.maxHp = 1e9; P.trk.reach = 2000;                      // menzil ekranın çok dışına taşar
+    P.hp = P.maxHp = 1e9; WEAPONS.bumerang.range = 1100;           // menzil ekranın çok dışına taşar
     P.arms = P.arms.map(() => null); P.arms[0] = {type:'bumerang', lv:1, cdT:0, aim:0, uid:777, bondM:1};
     const d = spawnEnemy('yengec', {x: CX + 300*S, y: CY}); d.hp = d.maxHp = 1e12; d.speed = 0; d.age = 1;
     spawnQueue = []; spawnIdx = 0; let launches = 0, last = null;
     for(let i = 0; i < 60*14; i++){ updateWave(1/60); const b = P.arms[0].boom; if(b && b !== last){ launches++; last = b; } }
-    P.trk.reach = 0; return { launches, stuck: !!P.arms[0].boom && projectiles.indexOf(P.arms[0].boom) === -1 };
+    WEAPONS.bumerang.range = 250; return { launches, stuck: !!P.arms[0].boom && projectiles.indexOf(P.arms[0].boom) === -1 };
   });
   check(vp, 'bumerang ekran dışına çıksa da kol kilitlenmez (tekrar fırlatır)', boom.launches >= 2 && !boom.stuck, JSON.stringify(boom));
   const same = await page.evaluate(() => {

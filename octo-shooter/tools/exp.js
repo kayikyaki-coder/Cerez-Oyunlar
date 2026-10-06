@@ -7,7 +7,7 @@
    Kullanım:
      node exp.js syn   [--wave 20] [--reps 12] [--file ../index.html]   her sınıf için sinerji açık/kapalı
      node exp.js bond  [--wave 20] [--reps 12]                           Komşu Bağı: en iyi vs en kötü yerleşim
-     node exp.js trk   [--wave 22] [--reps 12]                           her tılsım +5 (ya da tavan) vs baz
+     node exp.js trk   [--wave 22] [--reps 12] [--base melee|long|short]      her tılsım +5 (ya da tavan) vs baz
 ========================================================================= */
 const fs = require('fs');
 const path = require('path');
@@ -93,12 +93,24 @@ if(mode === 'syn'){
   }
 } else if(mode === 'trk'){
   console.log(`Tılsım etkisi (+5 ya da tavan, hangisi küçükse) — dalga ${WAVE}, ${REPS} tekrar, iyi2 benzeri 8 silah`);
-  const base = ['kurek', 'levye', 'asa', 'kiskac', 'alev', 'pompali', 'buz', 'murekkep'].map(id => id + ':3');
+  const BASES = {
+    melee: ['kurek', 'levye', 'asa', 'kiskac', 'alev', 'pompali', 'buz', 'murekkep'],
+    long:  ['tabanca', 'zipkin', 'yildirim', 'mancinik', 'bumerang', 'mizrak', 'zehir', 'asa'],
+    short: ['yumruk', 'diken', 'kiskac', 'levye', 'alev', 'girdap', 'pompali', 'testere']
+  };
+  const base = (BASES[arg('--base', 'melee')] || BASES.melee).map(id => id + ':3');
   const tl = (() => { const { A } = createGame(compiled, info, opts, 1); return A.g('TRINKETS'); })();
   for(const t of tl){
     const n = Math.min(5, Number.isFinite(t.cap) ? t.cap : 5);
-    ab(`${t.id} ×${n}`, base, (A, P) => { const ap = A.fn('applyTrinket'); const T = A.g('TRINKETS').find(x => x.id === t.id); for(let k = 0; k < n; k++) ap(T); },
-       base, null);
+    /* Komşu Bağı etkisi tılsımla çarpıldığı için iki kol da en iyi yerleşimde (adil karşılaştırma) */
+    const best = (A, P) => {
+      const sc = A.fn('bondScore'); let b0 = sc(P.arms), imp = true, g = 0;
+      while(imp && g++ < 40){ imp = false; for(let i = 0; i < P.arms.length; i++) for(let j = i + 1; j < P.arms.length; j++){
+        const x = P.arms[i]; P.arms[i] = P.arms[j]; P.arms[j] = x; const v = sc(P.arms);
+        if(v > b0){ b0 = v; imp = true; } else { const y = P.arms[i]; P.arms[i] = P.arms[j]; P.arms[j] = y; } } }
+    };
+    ab(`${t.id} ×${n}`, base, (A, P) => { best(A, P); const ap = A.fn('applyTrinket'); const T = A.g('TRINKETS').find(x => x.id === t.id); for(let k = 0; k < n; k++) ap(T); },
+       base, (A, P) => best(A, P));
   }
 } else {
   console.log('mod: syn | bond | trk');
