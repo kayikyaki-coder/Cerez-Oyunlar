@@ -1774,7 +1774,7 @@
       if (ev.choice === "jenerator") { S.blackout = 0.7; S.gen = 8; sfx("rumble"); } else S.blackout = ev.choice === "mum" ? 9 : 6;
     }
     S.crisis = null; S.crisisEnd = S.time + 1.2;
-    floaty((glad ? "✔ " : "✖ ") + (ev.label || ""), at.x - 20, at.y, glad ? C.green3 : C.red3, 17);
+    const lb = String(ev.label || ""); floaty((glad ? "✔ " : "✖ ") + (lb.length > 18 ? lb.slice(0, 17) + "…" : lb), L.door.x - 36, at.y, glad ? C.green3 : C.red3, 16);
     if (glad) { sparkles(at.x, at.y + 30, 6); sfx("coin"); } else { emoPart("💨", at.x, at.y + 30, 24); }
   }
 
