@@ -126,6 +126,24 @@ function makeHelpers(A, rng, rec, ratings){
         try { it.aim = H.call('armAngle', ea); } catch(e){}
       }
     },
+    /* Komşu Bağı yerleşimi: kol çiftlerini takas eden tırmanış (oyunun bondScore'u). Bağ sayısı artmayana dek. */
+    arrange(){
+      const P = H.P(), score = A.fn('bondScore');
+      if(typeof score !== 'function') return;
+      let best = score(P.arms), improved = true, guard = 0;
+      while(improved && guard++ < 30){
+        improved = false;
+        for(let i = 0; i < P.arms.length; i++) for(let j = i + 1; j < P.arms.length; j++){
+          if(!P.arms[i] && !P.arms[j]) continue;
+          const t = P.arms[i]; P.arms[i] = P.arms[j]; P.arms[j] = t;
+          const sc = score(P.arms);
+          if(sc > best){ best = sc; improved = true; }
+          else { const u = P.arms[i]; P.arms[i] = P.arms[j]; P.arms[j] = u; }
+        }
+      }
+      const aa = A.fn('armAngle');
+      P.arms.forEach((a, i) => { if(a){ try { a.aim = aa(i); } catch(e){} } });
+    },
     /* Kaba DPS tahmini — yalnız tablodaki alanlara bakar, bilinmeyen tür = dmg/cd */
     estDps(w, lv){
       if(!w) return 0;
@@ -347,20 +365,59 @@ const TR = {
           guard:(P,e)=>e>1?-1:13, regen:(P,e)=>e>1?-1:11, reach:(P,e)=>e>1?-1:11, _default:(P,e)=>e>1?-1:10 }
 };
 const POL = {};
-POL.kotu  = { name:'kotu', randomWeapons:true, randomTrinkets:true, randomMutation:true, dupBonus:0, sell:false,
+/* shield: Kabuk Kalkanı kullanma becerisi (0..1; büyük/telegraflı tehditte basma olasılığı),
+   mark: Odak İşareti (Kement/boss/elit), arrange: Komşu Bağı yerleşimi. İnsan oyuncuyu modeller. */
+POL.kotu  = { name:'kotu', shield:0, mark:false, arrange:false, randomWeapons:true, randomTrinkets:true, randomMutation:true, dupBonus:0, sell:false,
               rerolls:0, rerollMin:99, trk:TR.base, goldUntil:0,
               desc:'Rastgele silah, %30 rastgele tılsım, satış/yenileme yok, sadece otomatik birleştirme' };
-POL.orta  = { name:'orta', dupBonus:8, sell:true, sellLv2:false, rerolls:2, rerollMin:14, trk:TR.base, goldUntil:5,
+POL.orta  = { name:'orta', shield:0.5, mark:true, arrange:true, dupBonus:8, sell:true, sellLv2:false, rerolls:2, rerollMin:14, trk:TR.base, goldUntil:5,
               desc:'Açgözlü puan; tekrar eden türe +8, kopya için Lv1 satar, 2 yenileme (≥14💰), tılsım kollar dolunca' };
-POL.zayif = Object.assign({}, POL.orta, { name:'zayif', dupBonus:0, sell:false, rerolls:0, rerollMin:99, goldUntil:0,
+POL.zayif = Object.assign({}, POL.orta, { name:'zayif', shield:0.2, mark:false, arrange:false, dupBonus:0, sell:false, rerolls:0, rerollMin:99, goldUntil:0,
               randomMutation:true, desc:'Puana göre açgözlü alım, satış/yenileme yok' });
-POL.iyi   = { name:'iyi', dupBonus:14, sell:true, sellLv2:true, rerolls:6, rerollMin:8, trk:TR.good, goldUntil:6 };
+POL.iyi   = { name:'iyi', shield:0.8, mark:true, arrange:true, dupBonus:14, sell:true, sellLv2:true, rerolls:6, rerollMin:8, trk:TR.good, goldUntil:6 };
 POL.iyi2  = Object.assign({}, POL.iyi, { name:'iyi2', rerolls:10, rerollMin:6, focusTop:10,
               desc:'En güçlü 10 türe odaklanır, 10 yenileme, Lv2 satabilir' });
 /* Archetype'lar: sınıf(lar)a göre 8 tür (sınıftakiler puana göre, eksikse en iyi diğerleri) */
-const ARCHETYPES = { mermi:['Mermi'], buyuates:['Buyu','Ates'], yakin:['Yakin'], cubuk:['Cubuk'], uzun:['Uzun'], kan:['Kan'] };
+const ARCHETYPES = { mermi:['Mermi'], buyuates:['Buyu','Ates'], yakin:['Yakin'], cubuk:['Cubuk'], uzun:['Uzun'], kan:['Kan'], kontrol:['Kontrol'] };
 for(const [k, cls] of Object.entries(ARCHETYPES))
   POL[k] = Object.assign({}, POL.iyi, { name:k, focusClasses:cls, desc:`Archetype: ${cls.join('+')} sınıflı 8 türe odak` });
+
+/* Referans botlar: kalkan/işaret kullanmayan eşler (aktif girdinin etkisini ölçmek için) */
+POL.iyi2n = Object.assign({}, POL.iyi2, { name:'iyi2n', shield:0, mark:false, desc:'iyi2, ama kalkan/işaret kullanmaz (referans)' });
+POL.ortan = Object.assign({}, POL.orta, { name:'ortan', shield:0, mark:false, desc:'orta, ama kalkan/işaret kullanmaz (referans)' });
+
+/* İnsan girdisi modeli (autoShield/autoMark): her sim adımında çağrılır.
+   Kalkan: büyük (≥ maks canın %4'ü) ve telegraflı/uçan bir hasar 0,55 sn içinde geliyorsa, o tehdit için
+   bir kez `shield` olasılığıyla basar (beceri). Panik: can < %40 iken saniyede ~shield/2 olasılıkla basar.
+   İşaret: menzildeki Kement > boss > elit. */
+function makeInputBot(A, rng, pol){
+  const sk = pol.shield || 0;
+  let decided = null, markT = 0;
+  return function tick(dt){
+    if(!sk && !pol.mark) return;
+    const P = A.g('P');
+    if(pol.mark){
+      markT -= dt;
+      if(markT <= 0){
+        markT = 0.5;
+        if(!P.mark || P.mark.hp <= 0){
+          const t = A.fn('bestMarkTarget')(300 * A.g('S'));
+          if(t) A.fn('markAt')(t.x, t.y);
+        }
+      }
+    }
+    if(sk && P.shT <= 0 && P.shCd <= 0){
+      let tmin = Infinity;
+      const thr = 0.04 * P.maxHp;
+      for(const th of A.fn('shieldThreats')()) if(th.d >= thr && th.t < tmin) tmin = th.t;
+      if(tmin > 0.9) decided = null;
+      else if(tmin <= 0.55 && tmin >= 0.03){
+        if(decided === null) decided = rng() < sk;
+        if(decided){ A.fn('useShield')(); decided = null; }
+      }else if(P.hp < 0.4 * P.maxHp && rng() < sk * 0.5 * dt) A.fn('useShield')();
+    }
+  };
+}
 
 function focusList(H, pol){
   const W = H.W(), ids = Object.keys(W);
@@ -434,6 +491,7 @@ function f1ShopTurn(H, pol){
     break;
   }
   H.autoMerge();
+  if(pol.arrange) H.arrange();
 }
 
 /* Mutasyon seçimi (C6). Kural: kötü/zayıf rastgele; diğerleri hasar > saldırı hızı > can. */
@@ -486,13 +544,14 @@ function makeBot(name, H, opts){
   }
   throw new Error('Bilinmeyen bot: ' + name);
 }
-const F1_BOTS = ['kotu','zayif','orta','iyi2','mermi','buyuates','yakin','cubuk','uzun','kan'];
+const F1_BOTS = ['kotu','zayif','orta','iyi2','mermi','buyuates','yakin','cubuk','uzun','kan','kontrol'];
+const REF_BOTS = ['iyi2n','ortan'];
 const LEGACY_BOTS = Object.keys(STRATEGIES);
-const BOT_DESC = Object.fromEntries([...F1_BOTS.map(k => [k, POL[k].desc]), ...LEGACY_BOTS.map(k => [k, STRATEGIES[k].desc])]);
+const BOT_DESC = Object.fromEntries([...F1_BOTS.map(k => [k, POL[k].desc]), ...REF_BOTS.map(k => [k, POL[k].desc]), ...LEGACY_BOTS.map(k => [k, STRATEGIES[k].desc])]);
 
 /* Tasarımcının statik RATING tablosu (DESIGN.md çalışmasındaki bots.js) — --rating designer ile */
 const DESIGNER_RATING = { tabanca:18, midye:19, zipkin:15, taramali:17, pompali:16, vampir:13, levye:20, kurek:17,
   yumruk:19, bumerang:20, asa:19, yildirim:20, zehir:14, buz:9, murekkep:6, alev:18, testere:17, mancinik:18, diken:19 };
 
-module.exports = { makeHelpers, makeBot, pickMutationFor, focusList, F1_BOTS, LEGACY_BOTS, BOT_DESC, POL, ARCHETYPES,
+module.exports = { makeHelpers, makeBot, makeInputBot, pickMutationFor, focusList, F1_BOTS, REF_BOTS, LEGACY_BOTS, BOT_DESC, POL, ARCHETYPES,
                    STRATEGIES, DESIGNER_RATING, shopLoop };

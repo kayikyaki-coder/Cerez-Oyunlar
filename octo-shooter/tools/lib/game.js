@@ -158,9 +158,10 @@ const BRIDGE = `
     maxEnemies: 0, maxEnemiesWave: 0,
     /* Dalga içinde en fazla maxSteps adım; durum değişince durur.
        Aynı anda ekrandaki azami düşman sayısı da izlenir (F2 #14). */
-    stepWave: function(dt, maxSteps){
+    stepWave: function(dt, maxSteps, tick){
       var n = 0, WS = __g('WAVE_STATE'), S = globalThis.__OCTO_SIM;
       while(n < maxSteps && state === WS){
+        if(tick) tick(dt);               // bot girdisi (kalkan/işaret) — insan oyuncuyu modeller
         updateWave(dt); n++;
         if(enemies.length > S.maxEnemies){ S.maxEnemies = enemies.length; S.maxEnemiesWave = P.wave; }
       }

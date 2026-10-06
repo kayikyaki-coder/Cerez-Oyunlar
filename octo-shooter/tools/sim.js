@@ -24,7 +24,7 @@ const os = require('os');
 const { loadGameFromHtml } = require('./lib/game');
 const { runPool } = require('./lib/pool');
 const { getRatings, crowdTable, probe, median } = require('./lib/ratings');
-const { F1_BOTS, LEGACY_BOTS, BOT_DESC } = require('./lib/bots');
+const { F1_BOTS, REF_BOTS, LEGACY_BOTS, BOT_DESC } = require('./lib/bots');
 const { summarize, printSummary } = require('./lib/report');
 const { runAccept } = require('./lib/accept');
 
@@ -38,12 +38,13 @@ const DEFAULTS = {
   rating: 'dynamic',    // dynamic | designer (tasarımcının statik RATING tablosu)
   wtestWave: 8, wtestSec: 40, wtestReps: 4,         // F2 #11 kalabalık testi
   cheatRuns: 20, cheatWave: 15, cheatLv: 4,         // F2 #7 hileli bot
+  refRuns: 20,                                      // F2 #18: kalkansız referans botlar (iyi2n, ortan)
   perfWave: 30, perfCpu: 4, perfSec: 20, noPerf: false,   // F2 #14
   workers: Math.max(1, Math.min(os.cpus().length, 8)),
   accept: false, cheat: false, wtest: false, quiet: false
 };
 const NUM = ['runs','seed','maxWave','fps','shopEarly','shopLate','shopEarlyUntil','playSpeed','stallSec','workers',
-             'wtestWave','wtestSec','wtestReps','cheatRuns','cheatWave','cheatLv','perfWave','perfCpu','perfSec'];
+             'wtestWave','wtestSec','wtestReps','cheatRuns','cheatWave','cheatLv','perfWave','perfCpu','perfSec','refRuns'];
 const FLAGS = ['quiet','accept','cheat','wtest','noPerf'];
 
 function parseArgs(argv){
@@ -86,6 +87,7 @@ Genel:
   --workers <n>         worker sayısı (CPU sayısı)
 Kabul modu:
   --cheatRuns/--cheatWave/--cheatLv       hileli bot (20 / 15 / 4)
+  --refRuns <n>         kalkansız referans bot (iyi2n, ortan) koşu sayısı (20; 0 = atla)
   --wtestWave/--wtestSec/--wtestReps      kalabalık testi (8 / 40 / 4)
   --perfWave/--perfCpu/--perfSec/--noPerf performans (30 / 4x / 20 sn)
   --quiet               ilerleme yazma`;

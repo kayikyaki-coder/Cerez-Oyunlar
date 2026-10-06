@@ -12,7 +12,9 @@
    Çıktı: insan okunur satırlar + son satırda "PERF_JSON {...}".
 
    Kullanım: node perf.mjs [--file ../index.html] [--build build.json] [--wave 30]
-                           [--cpu 4] [--seconds 20] [--shot]
+                           [--cpu 4] [--seconds 20] [--keep 60] [--shot]
+   --keep N: ölçüm boyunca ekranda en az N düşman tutar (dalga erken bitip örneklem kısalmasın);
+             0 = kapalı. Varsayılan 60 (dalga 30 zirvesi ≈ 40–60).
    build.json: {"arms":["tabanca:3",...], "trinkets":{"dmg":10,...}}
    (verilmezse: en pahalı 10 türden Lv3, tüm tılsımlar tavanda)
 ========================================================================= */
@@ -28,6 +30,7 @@ const FILE = path.resolve(arg('--file', path.join(__dirname, '..', 'index.html')
 const WAVE = Number(arg('--wave', 30));
 const CPU = Number(arg('--cpu', 4));
 const SECONDS = Number(arg('--seconds', 20));
+const KEEP = Number(arg('--keep', 60));
 const buildPath = arg('--build', null);
 const build = buildPath ? JSON.parse(fs.readFileSync(buildPath, 'utf8')) : null;
 if(!process.env.PLAYWRIGHT_BROWSERS_PATH) process.env.PLAYWRIGHT_BROWSERS_PATH = '/opt/pw-browsers';
@@ -50,9 +53,11 @@ async function pass(browser, throttle){
   await page.waitForTimeout(300);
   const setup = await page.evaluate(({ build, wave }) => {
     const Tn = Array.isArray(TRINKETS) ? TRINKETS : [];
-    const want = build ? (build.trinkets || {}) : Object.fromEntries(Tn.map(t => [t.id, t.cap]));
+    /* tavansız tılsım (cap:Infinity, ör. inci) sonsuz döngüye sokmasın: 12 ile sınırla */
+    const capN = t => Number.isFinite(t.cap) ? t.cap : 12;
+    const want = build ? (build.trinkets || {}) : Object.fromEntries(Tn.map(t => [t.id, capN(t)]));
     for(const t of Tn){
-      const n = Math.min(want[t.id] || 0, t.cap ?? 99);
+      const n = Math.min(want[t.id] || 0, capN(t));
       for(let k = (P.trkCount[t.id] || 0); k < n; k++) applyTrinket(t);
     }
     let arms = build ? (build.arms || []) : [];
@@ -75,17 +80,21 @@ async function pass(browser, throttle){
   let cdp = null;
   if(throttle > 1){ cdp = await ctx.newCDPSession(page); await cdp.send('Emulation.setCPUThrottlingRate', { rate: throttle }); }
   await page.waitForTimeout(1000);
-  const m = await page.evaluate(sec => new Promise(res => {
+  const m = await page.evaluate(([sec, keep]) => new Promise(res => {
     const ft = []; let last = performance.now(), maxEn = 0, maxEnT = 0; const t0 = last;
+    const kinds = ['yengec', 'balon', 'karides', 'kaplumbaga', 'barakuda'];
     function f(now){
       ft.push(now - last); last = now;
+      if(keep > 0 && typeof enemies !== 'undefined'){
+        for(let k = 0; k < 4 && enemies.length < Math.min(keep, MAX_ENEMIES); k++) spawnEnemy(kinds[(enemies.length + k) % kinds.length]);
+      }
       const n = (typeof enemies !== 'undefined' && enemies) ? enemies.length : 0;
       if(n > maxEn){ maxEn = n; maxEnT = (now - t0) / 1000; }
       if(now - t0 < sec * 1000 && state === WAVE_STATE) requestAnimationFrame(f);
       else res({ frames: ft.length, elapsed: (now - t0) / 1000, ft, maxEn, maxEnT, state, waveT });
     }
     requestAnimationFrame(f);
-  }), SECONDS);
+  }), [SECONDS, KEEP]);
   const s = [...m.ft].sort((a, b) => a - b);
   const p95 = s[Math.floor(s.length * 0.95)] || 0;
   if(argv.includes('--shot')){
