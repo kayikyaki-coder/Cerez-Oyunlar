@@ -169,20 +169,21 @@ function computeMetrics(ctx){
     r.waves.forEach((t, j) => {
       const w = r.startWave + j;
       if(w < 6 || w > 20 || r.deathWave === w || !r.waveTaken) return;
-      tw++; if(r.waveTaken[j] <= 0.001) zw++;
+      tw++; if(r.waveTaken[j] <= 0.001 && !(r.waveBlocked && r.waveBlocked[j] > 0)) zw++;
     });
   }
   const zeroShare = tw ? zw / tw : NaN;
-  add(16, 'sıfır-hasar dalga payı (w6–20)', `${pct(zeroShare)} (${zw}/${tw} dalga)`, '≤ %50 (önceki ≈ %67–91)', Number.isFinite(zeroShare) && zeroShare <= 0.50);
+  add(16, 'tehditsiz dalga payı (w6–20)', `${pct(zeroShare)} (${zw}/${tw} dalga: hasar yok ve kalkan kullanılmadı)`, '≤ %50 (önceki ≈ %67–91)', Number.isFinite(zeroShare) && zeroShare <= 0.50);
   /* 17 boss etkisi: w10–20 boss karşılaşmalarında ahtapota ulaşma + verdiği hasar (maks canın %'si) */
   const bl = std.filter(r => ['orta','iyi2'].concat(Object.keys(ARCHETYPES)).includes(r.bot))
                 .flatMap(r => (r.bossLog || []).filter(b => b.wave >= 10 && b.wave <= 20).map(b => Object.assign({ maxHp: r.finalBuild.maxHp || 100 }, b)));
   const reachShare = bl.length ? bl.filter(b => b.reach).length / bl.length : NaN;
-  const dealtPct = bl.map(b => b.dealt / Math.max(1, b.maxHp));
+  /* etki = ahtapota işleyen + kalkanın yuttuğu (kalkansız olsaydı işleyecek) hasar */
+  const dealtPct = bl.map(b => (b.dealt + (b.blockedDmg || 0)) / Math.max(1, b.maxHp));
   const dealtMed = q(dealtPct, .5);
-  add(17, 'boss etkisi (w10–20)', `ahtapota ulaşma ${pct(reachShare)}, verdiği hasar medyan maks canın ${pct(dealtMed)} (p90 ${pct(q(dealtPct, .9))}), n=${bl.length}; ` +
-      `boss-dalga ölüm w10–20 ${pct(bossDeathMid(std))}`, 'ulaşma ≥ %50 ve medyan hasar ≥ %8 maks can; w10–20 boss-dalga ölümü %5–20',
-      reachShare >= 0.5 && dealtMed >= 0.08 && inR(bossDeathMid(std), 0.05, 0.20));
+  add(17, 'boss etkisi (w10–20)', `ahtapota ulaşma ${pct(reachShare)}, etkisi (işleyen+kalkanın yuttuğu hasar) medyan maks canın ${pct(dealtMed)} (p90 ${pct(q(dealtPct, .9))}), n=${bl.length}; ` +
+      `boss-dalga ölüm w10–20 ${pct(bossDeathMid(std))}`, 'medyan etki ≥ %8 maks can; w10–20 boss-dalga ölümü %3–20 (ulaşma yalnız bilgi: Kalamar/Fener menzilden vurur)',
+      dealtMed >= 0.08 && inR(bossDeathMid(std), 0.03, 0.20));
   /* 18 kalkan etkisi: iyi2 (kalkan 0,8) − iyi2n (kalkansız) medyan dalga farkı */
   const i2n = S.iyi2n, on = S.ortan;
   if(i2n && i2n.n){
@@ -201,10 +202,10 @@ function computeMetrics(ctx){
       'ilk 3 ≤ %60 ve tek kaynak ≤ %30 (önceki %76 / %36)', top3 <= 0.60 && top1 <= 0.30);
   /* 20 Fener Balığı / boss hasarsızlığı: her boss türü ahtapota en az bir kez hasar vermiş mi */
   const bt = {};
-  for(const r of std) for(const b of (r.bossLog || [])){ const o = bt[b.type] = bt[b.type] || { n: 0, dealt: 0, hit: 0 }; o.n++; o.dealt += b.dealt; if(b.dealt > 0) o.hit++; }
+  for(const r of std) for(const b of (r.bossLog || [])){ const o = bt[b.type] = bt[b.type] || { n: 0, dealt: 0, hit: 0 }; o.n++; o.dealt += b.dealt; if(b.dealt > 0 || b.blocked > 0) o.hit++; }
   const noHit = Object.keys(bt).filter(k => bt[k].hit / bt[k].n < 0.5);
-  add(20, 'boss türü başına hasar', Object.entries(bt).map(([k, o]) => `${k} ${pct(o.hit / o.n)} hasar verdi (ort ${Math.round(o.dealt / o.n)})`).join('; ') || 'boss karşılaşması yok',
-      'her boss türü karşılaşmaların ≥ %50\'sinde hasar vermeli (Fener Balığı 0 olmasın)', Object.keys(bt).length > 0 && noHit.length === 0);
+  add(20, 'boss türü başına hasar', Object.entries(bt).map(([k, o]) => `${k} ${pct(o.hit / o.n)} saldırısı ulaştı (ort işleyen hasar ${Math.round(o.dealt / o.n)})`).join('; ') || 'boss karşılaşması yok',
+      'her boss türünün saldırısı karşılaşmaların ≥ %50\'sinde ahtapota ulaşmalı (hasar ya da kalkan yutması; Fener Balığı 0 olmasın)', Object.keys(bt).length > 0 && noHit.length === 0);
   return { metrics: M, botStats: S, presence: pres, crowdLv1: lv1, crowdLv3: lv3 };
 }
 

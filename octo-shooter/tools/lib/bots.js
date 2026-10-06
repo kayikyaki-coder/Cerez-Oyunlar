@@ -14,7 +14,7 @@ function makeHelpers(A, rng, rec, ratings){
   const g = A.g;
   ratings = ratings || {};
   const H = {
-    rng,
+    rng, rec,
     /* Silah puanı (≈ etkin Lv1 DPS, medyan 18'e ölçekli). Tablo yoksa kaba tahmin. */
     rating(id){
       if(ratings[id] != null) return ratings[id];
@@ -51,6 +51,10 @@ function makeHelpers(A, rng, rec, ratings){
     },
     price(c){
       const d = H.cardDef(c); if(!d) return Infinity;
+      if(c.kind === 'weapon'){
+        const wp = A.fn('weaponPrice');                 // enflasyonlu fiyat
+        if(typeof wp === 'function'){ try { return wp(c.id); } catch(e){} }
+      }
       if(c.kind !== 'weapon'){
         const tp = A.fn('trkPrice');
         if(typeof tp === 'function'){ try { return tp(d); } catch(e){} }
@@ -124,6 +128,29 @@ function makeHelpers(A, rng, rec, ratings){
         H.call('setSlot', { z:'a', i:ea }, it);
         H.call('setSlot', { z:'b', i }, null);
         try { it.aim = H.call('armAngle', ea); } catch(e){}
+      }
+    },
+    /* Kol Cilası: artan altınla en güçlü kolların cilasını al (altın yutağı) */
+    polishAll(reserve){
+      const pa = A.fn('polishArm'), pc = A.fn('polishCost');
+      if(typeof pa !== 'function') return;
+      for(let guard = 0; guard < 80; guard++){
+        const arms = H.armItems().filter(x => (x.it.pol || 0) < 5)
+          .sort((a, b) => H.estDps(H.W()[b.it.type], b.it.lv) - H.estDps(H.W()[a.it.type], a.it.lv) || (a.it.pol||0) - (b.it.pol||0));
+        const x = arms.find(y => y.it.lv >= 2) || arms[0];
+        if(!x || H.gold() < pc(x.it) + reserve) break;
+        if(!pa(x.r)) break;
+        H.rec.polish = (H.rec.polish || 0) + 1;
+      }
+    },
+    /* Kabuk Onarımı (market düğmesi): can eşiğin altındaysa en çok 2 kez (altın yetiyorsa) */
+    repairTo(frac){
+      for(let k = 0; k < 2; k++){
+        const P = H.P();
+        if(!(P.hp < frac * P.maxHp)) break;
+        const g0 = P.gold;
+        try { A.el('btnRepair').click(); } catch(e){ rec.errors.push('repair: ' + e); break; }
+        if(H.P().gold >= g0) break;               // yetmedi / yapılamadı
       }
     },
     /* Komşu Bağı yerleşimi: kol çiftlerini takas eden tırmanış (oyunun bondScore'u). Bağ sayısı artmayana dek. */
@@ -367,14 +394,14 @@ const TR = {
 const POL = {};
 /* shield: Kabuk Kalkanı kullanma becerisi (0..1; büyük/telegraflı tehditte basma olasılığı),
    mark: Odak İşareti (Kement/boss/elit), arrange: Komşu Bağı yerleşimi. İnsan oyuncuyu modeller. */
-POL.kotu  = { name:'kotu', shield:0, mark:false, arrange:false, randomWeapons:true, randomTrinkets:true, randomMutation:true, dupBonus:0, sell:false,
+POL.kotu  = { name:'kotu', shield:0, mark:false, arrange:false, repair:0, randomWeapons:true, randomTrinkets:true, randomMutation:true, dupBonus:0, sell:false,
               rerolls:0, rerollMin:99, trk:TR.base, goldUntil:0,
               desc:'Rastgele silah, %30 rastgele tılsım, satış/yenileme yok, sadece otomatik birleştirme' };
-POL.orta  = { name:'orta', shield:0.5, mark:true, arrange:true, dupBonus:8, sell:true, sellLv2:false, rerolls:2, rerollMin:14, trk:TR.base, goldUntil:5,
+POL.orta  = { name:'orta', shield:0.5, mark:true, arrange:true, repair:0.5, polish:true, polishReserve:0, dupBonus:8, sell:true, sellLv2:false, rerolls:2, rerollMin:14, trk:TR.base, goldUntil:5,
               desc:'Açgözlü puan; tekrar eden türe +8, kopya için Lv1 satar, 2 yenileme (≥14💰), tılsım kollar dolunca' };
-POL.zayif = Object.assign({}, POL.orta, { name:'zayif', shield:0.2, mark:false, arrange:false, dupBonus:0, sell:false, rerolls:0, rerollMin:99, goldUntil:0,
+POL.zayif = Object.assign({}, POL.orta, { name:'zayif', shield:0.2, mark:false, arrange:false, repair:0.3, polish:false, dupBonus:0, sell:false, rerolls:0, rerollMin:99, goldUntil:0,
               randomMutation:true, desc:'Puana göre açgözlü alım, satış/yenileme yok' });
-POL.iyi   = { name:'iyi', shield:0.8, mark:true, arrange:true, dupBonus:14, sell:true, sellLv2:true, rerolls:6, rerollMin:8, trk:TR.good, goldUntil:6 };
+POL.iyi   = { name:'iyi', shield:0.8, mark:true, arrange:true, repair:0.65, polish:true, polishReserve:0, dupBonus:14, sell:true, sellLv2:true, rerolls:6, rerollMin:8, trk:TR.good, goldUntil:6 };
 POL.iyi2  = Object.assign({}, POL.iyi, { name:'iyi2', rerolls:10, rerollMin:6, focusTop:10,
               desc:'En güçlü 10 türe odaklanır, 10 yenileme, Lv2 satabilir' });
 /* Archetype'lar: sınıf(lar)a göre 8 tür (sınıftakiler puana göre, eksikse en iyi diğerleri) */
@@ -384,6 +411,9 @@ for(const [k, cls] of Object.entries(ARCHETYPES))
 
 /* Referans botlar: kalkan/işaret kullanmayan eşler (aktif girdinin etkisini ölçmek için) */
 POL.iyi2n = Object.assign({}, POL.iyi2, { name:'iyi2n', shield:0, mark:false, desc:'iyi2, ama kalkan/işaret kullanmaz (referans)' });
+/* Deney varyantları: yalnız kalkan / yalnız işaret */
+POL.iyi2s = Object.assign({}, POL.iyi2, { name:'iyi2s', mark:false, desc:'iyi2, yalnız kalkan (deney)' });
+POL.iyi2m = Object.assign({}, POL.iyi2, { name:'iyi2m', shield:0, desc:'iyi2, yalnız işaret (deney)' });
 POL.ortan = Object.assign({}, POL.orta, { name:'ortan', shield:0, mark:false, desc:'orta, ama kalkan/işaret kullanmaz (referans)' });
 
 /* İnsan girdisi modeli (autoShield/autoMark): her sim adımında çağrılır.
@@ -434,6 +464,7 @@ function focusList(H, pol){
 
 function f1ShopTurn(H, pol){
   const P = H.P();
+  if(pol.repair) H.repairTo(pol.repair);           // önce can: hasar kalıcı
   let rerolls = 0;
   const skip = new Set();
   for(let guard=0; guard<60; guard++){
@@ -492,6 +523,7 @@ function f1ShopTurn(H, pol){
   }
   H.autoMerge();
   if(pol.arrange) H.arrange();
+  if(pol.polish) H.polishAll(pol.polishReserve || 0);
 }
 
 /* Mutasyon seçimi (C6). Kural: kötü/zayıf rastgele; diğerleri hasar > saldırı hızı > can. */
@@ -546,8 +578,9 @@ function makeBot(name, H, opts){
 }
 const F1_BOTS = ['kotu','zayif','orta','iyi2','mermi','buyuates','yakin','cubuk','uzun','kan','kontrol'];
 const REF_BOTS = ['iyi2n','ortan'];
+const EXP_BOTS = ['iyi2s','iyi2m'];
 const LEGACY_BOTS = Object.keys(STRATEGIES);
-const BOT_DESC = Object.fromEntries([...F1_BOTS.map(k => [k, POL[k].desc]), ...REF_BOTS.map(k => [k, POL[k].desc]), ...LEGACY_BOTS.map(k => [k, STRATEGIES[k].desc])]);
+const BOT_DESC = Object.fromEntries([...F1_BOTS.map(k => [k, POL[k].desc]), ...REF_BOTS.map(k => [k, POL[k].desc]), ...EXP_BOTS.map(k => [k, POL[k].desc]), ...LEGACY_BOTS.map(k => [k, STRATEGIES[k].desc])]);
 
 /* Tasarımcının statik RATING tablosu (DESIGN.md çalışmasındaki bots.js) — --rating designer ile */
 const DESIGNER_RATING = { tabanca:18, midye:19, zipkin:15, taramali:17, pompali:16, vampir:13, levye:20, kurek:17,

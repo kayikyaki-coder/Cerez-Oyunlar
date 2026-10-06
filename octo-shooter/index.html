@@ -298,8 +298,9 @@
       • Kollar <b>kendiliğinden</b> ateş eder. Dalgada sen: bir düşmana <b>dokun = işaretle</b> (önce o vurulur), <b>Q / Boşluk = Kabuk Kalkanı</b> (1 sn, kırmızı çizgi görünce kullan).<br>
       • Kart al → silah boş kola takılır. Aynı silah + aynı seviye = <b>birleştir</b> (sürükle-bırak).<br>
       • Aynı sınıftan farklı silahlar <b>sinerji</b> açar; <b>yan yana</b> duran ortak sınıflı kollar ayrıca bağ kurar.<br>
-      • Her 5. dalga boss; 10'dan sonra boss yenince <b>mutasyon</b> seç. ⏸ ve 2x/4x hız sağ üstte.
+      • Her 5. dalga boss; 10'dan sonra boss yenince <b>mutasyon</b> seç. Biriken altın: <b>✨ Cila</b> (seçili kola +%6 hasar) ve <b>Kabuğu Onar</b>. ⏸ ve 2x/4x hız sağ üstte.
     </div>
+    <div class="synPanel" id="heatPanel"></div>
     <div class="synPanel" id="synPanel"></div>
     <div class="synPanel" id="reportPanel" style="display:none"></div>
     <div class="cards" id="cards"></div>
@@ -307,13 +308,14 @@
     <div class="btnRow">
       <button class="alt" id="btnReroll">🔄 Yenile (2💰)</button>
       <button class="alt" id="btnAutoMerge">⚗️ Otomatik Birleştir</button>
+      <button class="alt" id="btnRepair">🩹 Kabuğu Onar</button>
     </div>
     <div id="armsTitle">KOLLAR — sürükle: taşı, birleştir, yer değiştir<br><span style="color:var(--glow)">Yan yana ortak sınıflı kollar bağ kurar: her komşu +%7 hasar</span></div>
     <div id="armCircle"><canvas class="center" id="octoIcon" width="112" height="112"></canvas></div>
     <div id="benchTitle" style="display:none">YEDEK KOLLAR — pasif, sadece silah tutar ve geliştirmede kullanılır</div>
     <div id="benchRow"></div>
     <div id="slotInfo"></div>
-    <div class="btnRow"><button class="warn" id="btnSell" style="display:none">🗑️ Sat</button></div>
+    <div class="btnRow"><button class="alt" id="btnPolish" style="display:none">✨ Cila</button><button class="warn" id="btnSell" style="display:none">🗑️ Sat</button></div>
     <div id="trkList"></div>
     <div class="btnRow"><button class="big" id="btnStart">⚔️ Dalgayı Başlat</button></div>
   </div>
@@ -388,7 +390,7 @@ const WAVE_DURATION = 30;
 /* Doğma yarıçapı OYUN-UZAYI biriminde (×S): telefon ve masaüstünde yürüme mesafesi aynı.
    Küçük ekranlarda köşeye yakın doğan düşman kısa bir belirme (fade-in) ile gelir. */
 const ARENA_R = 900;
-const BOSS_AT = 10;                        // boss, waveT bu değere inince doğar (dalganın 20. sn'si)
+const BOSS_AT = 15;                        // boss, waveT bu değere inince doğar (dalganın 15. sn'si: ana akışla çakışır)
 const LVL_MULT = lv => Math.pow(1.55, lv-1);
 const MAX_LV = 4;                          // Lv4 (Efsane): dalga 15+ Lv3 türleri markete döner
 const LV4_WAVE = 15;
@@ -403,6 +405,15 @@ const CRIT_MULT = 1.75;
 const SHIELD_DUR = 1.0, SHIELD_CD = 12, SHIELD_REFUND = 0.35, SHIELD_MIN_CD = 7;
 /* Komşu Bağı: yan yana iki kol ortak sınıf paylaşıyorsa her ikisi +%7 hasar (komşu başına) */
 const BOND_PCT = 0.07;
+/* Kızışan Sular (tempo/zorluk): temiz (hasarsız) dalgalar suları kızıştırır → sonraki NORMAL dalgada seviye başına +%14 düşman,
+   +%8 can, +%15 öldürme altını (en çok 4). Dalga 5'ten sonra işler; maks canın %12'sinden fazla hasar yiyen dalga seviyeyi düşürür;
+   boss dalgaları seviyeyi değiştirmez. Seviye tavanı dalgaya bağlı: dalga 6–8: 1, 9–11: 2, 12–14: 3, 15+: 4 (zayıf kurulum ani sıçramaya uğramasın).
+   Kusursuz oynayan da tetikte kalır; riskin ödülü (altın) vardır. */
+const HEAT_MAX = 4, HEAT_CLEAN = 0.04, HEAT_HURT = 0.12;
+function heatOn(){ return P.wave % 5 !== 0; }                       // boss dalgasında düşman çarpanı yok
+function heatCount(){ return heatOn() ? 1 + 0.14*(P.heat||0) : 1; }
+function heatHp(){ return heatOn() ? 1 + 0.08*(P.heat||0) : 1; }
+function heatGold(){ return 1 + 0.15*(P.heat||0); }
 const rad = d => d*Math.PI/180;
 function armAngle(i){ return Math.PI*2*i/P.arms.length; }
 
@@ -411,7 +422,7 @@ const CLASSES = {
   Mermi   : {disp:'Mermi',       thr:[3,6], txt:['Her 5. mermi çift vurur','Her 4. mermi çift vurur']},
   Buyu    : {disp:'Büyü',        thr:[2,4,6], txt:['Alan yarıçapı +%15','Alan yarıçapı +%30','Alan +%50 ve efekt süreleri +%50']},
   Ates    : {disp:'Ateş',        thr:[3,5], txt:['Vuruşlar 2sn yakma bırakır (%15/sn)','Yakma %30 + yanana +%10 hasar']},
-  Uzun    : {disp:'Uzun Menzil', thr:[2,4], txt:['Tüm menziller +20','Tüm menziller +50']},
+  Uzun    : {disp:'Uzun Menzil', thr:[2,4], txt:['Menziller +20; Uzun silahlar +%8 hasar','Menziller +50; Uzun silahlar +%15 hasar']},
   Yakin   : {disp:'Yakın Dövüş', thr:[2,5], txt:['Yakın silah hasarı +%15','Yakın silah hasarı +%35 (5 silah)']},
   Cubuk   : {disp:'Çubuk',       thr:[2,4], txt:['Çubuk silahları +%12 saldırı hızı','Savurmalar %25 daha geniş']},
   Kontrol : {disp:'Kontrol',     thr:[2,4], txt:['Kontrol süreleri +%30','Kontroldeki düşman +%15 hasar alır']},
@@ -422,21 +433,21 @@ const CLASSES = {
 const WEAPONS = {
   tabanca : {name:'Tabanca',        icon:'🔫', cls:['Mermi','Uzun'],    price:12, range:300, cd:0.55,  dmg:11,  kind:'bullet',
              desc:'Sade ve güvenilir tekli mermi'},
-  midye   : {name:'Midye Topu',     icon:'🐚', cls:['Mermi','Buyu'],    price:14, range:240, cd:0.18,  dmg:3.4, kind:'bullet',
+  midye   : {name:'Midye Topu',     icon:'🐚', cls:['Mermi','Buyu'],    price:14, range:240, cd:0.18,  dmg:3.8, kind:'bullet',
              rico:{range:100, mult:0.5}, desc:'Seri atış; mermi 100 menzildeki düşmana yarı hasarla seker'},
   zipkin  : {name:'Zıpkın Tüfeği',  icon:'🔱', cls:['Mermi','Uzun'],    price:20, range:430, cd:1.50,  dmg:32,  kind:'bullet',
              desc:'Çok uzun menzil, ağır tekli vuruş'},
-  taramali: {name:'Taramalı',       icon:'💦', cls:['Mermi','Ates'],    price:15, range:280, cd:0.30,  dmg:3.6, kind:'bullet',
-             ramp:{max:8}, desc:'Aynı hedefe giden her mermi +1 hasar (tavan 8)'},
+  taramali: {name:'Taramalı',       icon:'💦', cls:['Mermi','Ates'],    price:15, range:280, cd:0.30,  dmg:4.5, kind:'bullet',
+             ramp:{max:10}, desc:'Aynı hedefe giden her mermi +1 hasar (tavan 10)'},
   pompali : {name:'Pompalı',        icon:'💥', cls:['Mermi','Kontrol'], price:15, range:130, cd:1.11,  dmg:11,  kind:'cone_shot',
              cone:35, knock:24, desc:'Koni saçma; vurduklarını geri iter (Mermi çift vuruşu tüm saçmaya)'},
-  vampir  : {name:'Vampir Dişi',    icon:'🦷', cls:['Mermi','Kan'],     price:16, range:220, cd:0.70,  dmg:14,   kind:'bullet',
+  vampir  : {name:'Vampir Dişi',    icon:'🦷', cls:['Mermi','Kan'],     price:16, range:220, cd:0.70,  dmg:20,   kind:'bullet',
              heal:0.008, desc:'Her isabet maks. canın %0,8\'i kadar can verir (Lv2: %1,2 · Lv3: %1,6)'},
   levye   : {name:'Levye',          icon:'🪝', cls:['Cubuk','Yakin'],   price:14, range:95,  cd:0.90,  dmg:13,  kind:'melee_cone',
              cone:55, desc:'~120° koni savurma, konidekilere tam hasar'},
   kurek   : {name:'Kürek',          icon:'🏏', cls:['Cubuk','Kontrol'], price:16, range:118, cd:1.25,  dmg:15,  kind:'melee_cone',
              cone:60, stun:0.14, desc:'Koni savurma + 0,14sn sersemletme'},
-  yumruk  : {name:'Yumruk',         icon:'👊', cls:['Cubuk','Kan'],     price:14, range:70,  cd:0.60,  dmg:15,  kind:'melee_single',
+  yumruk  : {name:'Yumruk',         icon:'👊', cls:['Cubuk','Kan'],     price:14, range:70,  cd:0.60,  dmg:17,  kind:'melee_single',
              desc:'Çok kısa menzil, en yüksek tek hedef DPS'},
   bumerang: {name:'Bumerang',       icon:'🪃', cls:['Cubuk','Uzun'],    price:16, range:250, cd:0.20,  dmg:9,   kind:'boomerang',
              speed:360, desc:'250 menzile gidip döner, geçtiği herkese vurur'},
@@ -454,8 +465,8 @@ const WEAPONS = {
              cone:17.5, desc:'Dar koni (~35°) sürekli tik hasarı'},
   testere : {name:'Testere',        icon:'🪚', cls:['Yakin','Kan'],     price:16, range:150, cd:0.143, dmg:3.2, kind:'tick_single',
              desc:'Temas ettiği hedefe hızlı tik hasarı, ek etkisiz yüksek DPS'},
-  mancinik: {name:'Mancınık',       icon:'☄️', cls:['Ates','Uzun'],     price:22, range:500, cd:3.00,  dmg:41,  kind:'artillery',
-             aoe:60, delay:1.0, desc:'Hedefin konumuna 1sn gecikmeli düşen alan; hızlı düşmanlar kaçabilir'},
+  mancinik: {name:'Mancınık',       icon:'☄️', cls:['Ates','Uzun'],     price:22, range:500, cd:3.00,  dmg:37,  kind:'artillery',
+             aoe:70, delay:0.9, desc:'Hedefin konumuna 0,9sn gecikmeli düşen alan; hızlı düşmanlar kaçabilir'},
   diken   : {name:'Dikenli Kabuk',  icon:'🦔', cls:['Yakin','Kan'],     price:16, range:60,  cd:0.80,  dmg:13.5, kind:'melee_single',
              thorn:true, desc:'En kısa menzil, yüksek DPS + pasif: ahtapota vuran düşman anında diken yer'},
   /* --- yeni 5 silah (DESIGN.md C4) --- */
@@ -465,7 +476,7 @@ const WEAPONS = {
              slow:{pct:0.2, dur:1.5}, bleed:{mult:1.0, dur:3}, desc:'Kanama: vuruş hasarının %100\'ü/sn, 3sn; hafif yavaşlatır'},
   mizrak  : {name:'Kılıçbalığı Mızrağı', icon:'🗡️', cls:['Uzun','Yakin'], price:18, range:200, cd:1.20, dmg:15, kind:'lance',
              width:16, desc:'Nişan yönünde delip geçen mızrak hattı; hattaki herkese vurur'},
-  girdap  : {name:'Girdap Asası',   icon:'🌀', cls:['Buyu','Cubuk'],    price:19, range:100, cd:1.50,  dmg:9.5, kind:'nova',
+  girdap  : {name:'Girdap Asası',   icon:'🌀', cls:['Buyu','Cubuk'],    price:19, range:110, cd:1.50,  dmg:10.5, kind:'nova',
              knock:20, desc:'Ahtapotun çevresine halka dalga; içindeki herkese vurur ve geri iter'},
   kiskac  : {name:'Mengene Kıskaç', icon:'🦞', cls:['Yakin','Kontrol'], price:15, range:80,  cd:0.65,  dmg:22,  kind:'melee_single',
              stun:0.18, desc:'Kısa menzil; vurduğunu 0,18sn sıkıştırır (sersemletir)'}
@@ -492,11 +503,11 @@ const MUTATIONS = [
   {id:'basinc',    name:'Derin Basınç',       icon:'🌊', from:10, desc:'Tüm hasar +%12'},
   {id:'refleks',   name:'Sinir Ağı',          icon:'⚡', from:10, desc:'Saldırı hızı +%10'},
   {id:'ucYurek',   name:'Üç Yürek',           icon:'❤️', from:10, desc:'Maks. can +%35'},
-  {id:'kitin',     name:'Kitin Deri',         icon:'🛡️', from:10, desc:'Alınan hasar −%12'},
+  {id:'kitin',     name:'Kitin Deri',         icon:'🛡️', from:10, desc:'Alınan hasar −%15'},
   {id:'uzanti',    name:'Uzayan Kollar',      icon:'🦑', from:10, desc:'Menzil +25, alan yarıçapı +%10'},
-  {id:'kanEmici',  name:'Kan Emici',          icon:'🩸', from:10, desc:'Öldürme başına +1 can (elit +4, dev düşman +20)'},
+  {id:'kanEmici',  name:'Kan Emici',          icon:'🩸', from:10, desc:'Öldürme başına maks canın %0,4\'ü can verir (elit %2, dev düşman %15)'},
   {id:'bulut',     name:'Mürekkep Bulutu',    icon:'🌫️', from:10, desc:'Dalga başına 1 kez: can < %35 olunca 4 sn tüm düşmanlar mürekkeplenir (+%20 hasar alır) ve %40 yavaşlar'},
-  {id:'asitKan',   name:'Asit Kan',           icon:'🧪', from:10, desc:'Yakma/zehir/kanama DPS\'i +%60'},
+  {id:'asitKan',   name:'Asit Kan',           icon:'🧪', from:10, desc:'Yakma/zehir/kanama DPS\'i +%80'},
   {id:'keskin',    name:'Keskin Uç',          icon:'🎯', from:10, desc:'Kritik şansı +%8, kritik çarpanı 1,75 → 2,1'},
   {id:'siginak',   name:'Sığınak',            icon:'🛟', from:10, desc:'Kalkan beklemesi −%25; savuşta çevre 0,6 sn sersemler'},
   {id:'katalizor', name:'Sinerji Katalizörü', icon:'✨', from:15, desc:'En çok benzersiz silahı olan sınıfın sayısı +1'},
@@ -508,24 +519,27 @@ const MAX_ARMS = 11;
 
 const ENEMY_TYPES = {
   karides   :{name:'Karides',            icon:'🦐', hp:11,  speed:92, dmg:4,  gold:1, r:11, kbRes:1},
-  yengec    :{name:'Yengeç',             icon:'🦀', hp:24,  speed:50, dmg:7,  gold:2, r:14, kbRes:1},
-  balon     :{name:'Balon Balığı',       icon:'🐡', hp:78,  speed:34, dmg:13, gold:4, r:18, kbRes:0.5,
+  yengec    :{name:'Yengeç',             icon:'🦀', hp:24,  speed:50, dmg:9,  gold:2, r:14, kbRes:1},
+  balon     :{name:'Balon Balığı',       icon:'🐡', hp:78,  speed:34, dmg:11, gold:4, r:18, kbRes:0.5,
                intro:'Yavaş ama çok dayanıklı'},
-  barakuda  :{name:'Barakuda',           icon:'🐟', hp:16,  speed:40, dmg:6,  gold:2, r:12, kbRes:1.2,
+  barakuda  :{name:'Barakuda',           icon:'🐟', hp:16,  speed:40, dmg:6.5, gold:2, r:12, kbRes:1.2,
                beh:'dash', dash:{trig:420, tele:0.35, spd:320, dur:0.5, cd:2.5},
                intro:'Yaklaşınca durur, sonra hızla atılır'},
-  okcu      :{name:'Okçu Balığı',        icon:'🐠', hp:26,  speed:45, dmg:3,  gold:3, r:12, kbRes:1.0,
+  okcu      :{name:'Okçu Balığı',        icon:'🐠', hp:26,  speed:45, dmg:2.0, gold:3, r:12, kbRes:1.0,
                beh:'ranged', ranged:{stop:230, cd:2.5, tele:0.45, projSpd:220, shotsBeforeAdvance:2, advanceTo:55},
                intro:'Uzaktan su jeti fırlatır'},
-  kaplumbaga:{name:'Deniz Kaplumbağası', icon:'🐢', hp:110, speed:25, dmg:12, gold:5, r:20, kbRes:0.2,
+  kement    :{name:'Kement Balığı',      icon:'🪢', hp:40,  speed:38, dmg:4,  gold:3, r:13, kbRes:1.0,
+               beh:'lasso', lasso:{stop:260, cd:8, tele:0.5, jam:4},
+               intro:'Kolunu bağlar; ölünce çözülür'},
+  kaplumbaga:{name:'Deniz Kaplumbağası', icon:'🐢', hp:110, speed:25, dmg:10.5, gold:5, r:20, kbRes:0.2,
                armor:5, intro:'Zırh 5: küçük vuruşlar az işler, yakma/zehir tam işler'},
   denizanasi:{name:'Denizanası',         icon:'🪼', hp:36,  speed:34, dmg:8,  gold:3, r:15, kbRes:0.8,
                split:{type:'yavru', n:3, spread:25}, intro:'Ölünce 3 yavruya bölünür'},
   yavru     :{name:'Yavru Denizanası',   icon:'🫧', hp:9,   speed:70, dmg:3,  gold:0, r:8,  kbRes:1.5},
   /* Bosslar — HP/dmg/altın formülü spawnBoss'ta (B2) */
   boss      :{name:'Köpekbalığı',        icon:'🦈', hp:380, speed:26, dmg:8, gold:30, r:30, kbRes:0.1, boss:true,
-               beh:'shark',    intro:'Kırmızı çizgi = hücum! 2× hasarla saldırır'},
-  yengecKral:{name:'Yengeç Kral',        icon:'🦀', hp:400, speed:20, dmg:10, gold:30, r:36, kbRes:0,   boss:true,
+               beh:'shark',    intro:'Kırmızı çizgi = hücum! Kalkanla karşıla'},
+  yengecKral:{name:'Yengeç Kral',        icon:'🦀', hp:400, speed:22, dmg:6, gold:30, r:36, kbRes:0,   boss:true,
                beh:'kingcrab', armor:4, intro:'Zırh 4; can eşiklerinde kabuğa çekilip yengeç çağırır'},
   kalamar   :{name:'Dev Kalamar',        icon:'🦑', hp:360, speed:34, dmg:5,  gold:30, r:32, kbRes:0.2, boss:true,
                beh:'squid',    intro:'Uzaktan mürekkep atar: isabet menzilleri %25 kısaltır'},
@@ -533,14 +547,14 @@ const ENEMY_TYPES = {
                beh:'angler',   intro:'Aurası müttefikleri iyileştirir, karides çağırır'}
 };
 /* Zorluk eğrisi (DESIGN.md B2 + G): 1-18 polinom, 19-24 dik bölge (×1,12/dalga; orta oyuncu burada elenir), 25-31 yalnız polinom (iyi oyuncular ayrışır), 32+ sert duvar; boss dalgasında normal düşman ×0,8 */
-function hpMul(w){   return (1 + 0.25*(w-1) + 0.016*(w-1)*(w-1))
-                          * Math.pow(1.12, Math.min(6, Math.max(0, w-18)))
+function hpMul(w){   return (1 + 0.25*(w-1) + 0.0145*(w-1)*(w-1))
+                          * Math.pow(1.06, Math.min(10, Math.max(0, w-18)))
                           * Math.pow(1.30, Math.max(0, w-31)); }
-function dmgMul(w){  return (1 + 0.10*(w-1))
-                          * Math.pow(1.06, Math.min(6, Math.max(0, w-18)))
+function dmgMul(w){  return (1 + 0.09*(w-1))
+                          * Math.pow(1.045, Math.min(10, Math.max(0, w-18)))
                           * Math.pow(1.10, Math.max(0, w-31)); }
 function enemyCount(w){ return Math.round(Math.min(90, 10 + 3*w) * (w % 5 === 0 ? 0.8 : 1)); }          // "slot" sayısı; elit = 2 slot
-function eliteChance(w){ return w < 10 ? 0 : Math.min(0.10, 0.04 + 0.004*(w-10)); }
+function eliteChance(w){ return (w < 10 || w % 5 === 0) ? 0 : Math.min(0.10, 0.04 + 0.004*(w-10)); }   // boss dalgasında elit yok (boss okunabilir kalsın)
 
 /* ---------- Oyun durumu ---------- */
 let state, P, enemies, projectiles, effects, dmgNums, flames, pendings, eShots = [];
@@ -587,7 +601,8 @@ function newGame(){
     perks: [], blindT: 0, bulutUsed: false, bulutT: 0, seen: {},
     /* Aktif yetenekler (Kabuk Kalkanı, Odak İşareti) + ölçüm kayıtları */
     shT: 0, shCd: 0, shMax: SHIELD_CD, shHit: false, shUses: 0, parries: 0, shBlocked: 0, mark: null,
-    goldFrac: 0, taken: {}, bossLog: [], repairs: 0
+    goldFrac: 0, taken: {}, bossLog: [], repairs: 0,
+    heat: 0, wTaken: 0, heatLog: []
   };
   enemies=[]; projectiles=[]; effects=[]; dmgNums=[]; flames=[]; pendings=[]; eShots=[];
   bulletCounter = 0; selectedRef = null; nextUid = 1; uidType = {};
@@ -743,6 +758,15 @@ function renderShop(){
   $('sHp').textContent   = Math.ceil(P.hp);
   $('sMaxHp').textContent= P.maxHp;
 
+  /* Kızışan Sular durumu */
+  {
+    const hp2 = $('heatPanel');
+    hp2.innerHTML = P.heat > 0
+      ? `<b>🔥 Kızışan Sular ${'▲'.repeat(P.heat)}${'△'.repeat(HEAT_MAX-P.heat)}</b> — bu dalga: ` + (heatOn()
+          ? `düşman <b>+%${Math.round((heatCount()-1)*100)}</b>, can <b>+%${Math.round((heatHp()-1)*100)}</b>, düşman altını <b>+%${Math.round((heatGold()-1)*100)}</b>. Ağır hasar yersen seviye düşer.`
+          : `boss dalgası: düşman çarpanı yok, düşman altını <b>+%${Math.round((heatGold()-1)*100)}</b>.`)
+      : `<span style="color:var(--dim)">🔥 Kızışan Sular: hasarsız dalgalar suları kızıştırır (+düşman, +altın). Şu an seviye 0.</span>`;
+  }
   /* Sinerji paneli */
   /* Aktif (tier>0) ve bir sonraki eşiğe 1 kalan sınıflar üstte; gerisi katlanır */
   let sHtml = '<b>Sinerjiler</b> (aynı sınıftaki BENZERSİZ silahlar sayılır)<br>', rest = '', nRest = 0;
@@ -786,7 +810,7 @@ function renderShop(){
     const div = document.createElement('div');
     let price, html;
     if(c.kind==='weapon'){
-      const w = WEAPONS[c.id]; price = w.price;
+      const w = WEAPONS[c.id]; price = weaponPrice(c.id);
       const canUpg = armsFull && benchFull &&
         allRefs().some(r=>{ const it=getSlot(r); return it && it.type===c.id && it.lv===1; });
       const noRoom = armsFull && benchFull && !canUpg;      // yer yok ve geliştirecek eş yok: ölü kart değil, açık uyarı
@@ -820,7 +844,7 @@ function renderShop(){
     if(selectedRef && !sameRef(ref, selectedRef) && canMerge(a, selItem))
       s.classList.add('mergeable');
     const bn = (a && ref.z==='a') ? bondInfo(ref.i).length : 0;
-    s.innerHTML = a ? `${iconImg('w', a.type, 30)}<div class="lv">Lv${a.lv}</div>${bn ? `<div class="bd">+%${Math.round(bn*BOND_PCT*100)}</div>` : ''}` : '';
+    s.innerHTML = a ? `${iconImg('w', a.type, 30)}<div class="lv">Lv${a.lv}${a.pol ? '<span style="color:var(--glow)"> ✦'+a.pol+'</span>' : ''}</div>${bn ? `<div class="bd">+%${Math.round(bn*BOND_PCT*100)}</div>` : ''}` : '';
     s.dataset.z = ref.z; s.dataset.i = ref.i;
     s.addEventListener('pointerdown', ev=>dragStart(ev, ref, s));
     return s;
@@ -864,7 +888,7 @@ function renderShop(){
   const info = $('slotInfo');
   if(selItem){
     const a = selItem, w = WEAPONS[a.type];
-    const d = Math.round(w.dmg*LVL_MULT(a.lv)*10)/10;
+    const d = Math.round(w.dmg*LVL_MULT(a.lv)*(1 + POLISH_PCT*(a.pol||0))*10)/10;
     const where = selectedRef.z==='b' ? ' <span style="color:var(--violet)">[yedek — pasif]</span>' : '';
     let bondTxt = '';
     if(selectedRef.z==='a'){
@@ -876,15 +900,22 @@ function renderShop(){
     info.innerHTML = `<b>${w.name} Lv${a.lv}</b>${where} (${clsNames(w)}) — Hasar ${d}, Menzil ${w.range}${bondTxt}<br>
       Sürükle: boş yuvaya taşı • aynı tür/seviyeye birleştir • dolu yuvayla yer değiştir`;
     $('btnSell').style.display='inline-block';
+    const canPol = selectedRef.z==='a' && (selItem.pol||0) < POLISH_MAX;
+    $('btnPolish').style.display = selectedRef.z==='a' ? 'inline-block' : 'none';
+    $('btnPolish').disabled = !canPol || P.gold < polishCost(selItem);
+    $('btnPolish').textContent = (selItem.pol||0) >= POLISH_MAX ? '✨ Cila tam (5/5)' : `✨ Cila +%6 (${polishCost(selItem)}💰) · ${(selItem.pol||0)}/5`;
     $('btnSell').textContent = sameRef(sellPendingRef, selectedRef)
       ? `❗ Emin misin? (+${sellPrice(a)}💰)`
       : `🗑️ Sat (+${sellPrice(a)}💰)`;
   }else{
     info.textContent = 'Silahı sürükleyerek taşı veya birleştir. Bilgi için üstüne dokun.';
     $('btnSell').style.display='none';
+    $('btnPolish').style.display='none';
   }
 
   renderTrinkets();
+  $('btnRepair').disabled = P.repairs >= 2 || P.hp >= P.maxHp || P.gold < repairCost();
+  $('btnRepair').textContent = P.hp >= P.maxHp ? '🩹 Kabuk sağlam' : `🩹 Onar +%25 (${repairCost()}💰)${P.repairs ? ' ·'+P.repairs+'/2' : ''}`;
   $('btnReroll').disabled = P.gold < rerollCost();
   $('btnReroll').textContent = `🔄 Yenile (${rerollCost()}💰)`;
   drawShopOcto();
@@ -940,6 +971,19 @@ function renderTrinkets(){
   box.innerHTML = mh + h + '</div>';
 }
 
+/* Altın yutakları: silah fiyatı dalga 12'den sonra +%4/dalga (enflasyon); Kol Cilası: kol başına 5 kademe, +%6 hasar */
+const POLISH_MAX = 5, POLISH_PCT = 0.06;
+function inflation(){ return 1 + 0.04*Math.max(0, P.wave - 12); }
+function weaponPrice(id){ return Math.round(WEAPONS[id].price * inflation()); }
+function polishCost(a){ return Math.round((25 + 20*(a.pol||0)) * inflation()); }
+function polishArm(ref){
+  const a = ref ? getSlot(ref) : null;
+  if(!a || ref.z !== 'a' || (a.pol||0) >= POLISH_MAX) return false;
+  const c = polishCost(a);
+  if(P.gold < c) return false;
+  P.gold -= c; a.pol = (a.pol||0) + 1;
+  return true;
+}
 function sellPrice(a){ return Math.max(1, Math.floor(WEAPONS[a.type].price * a.lv * 0.5)); }
 
 function chainMerge(ref){
@@ -951,7 +995,7 @@ function chainMerge(ref){
       if(sameRef(r, ref)) continue;
       const b = getSlot(r);
       if(canMerge(a, b)){
-        a.lv += 1; setSlot(r, null); again = true;
+        a.lv += 1; a.pol = Math.max(a.pol||0, b.pol||0); setSlot(r, null); again = true;
         break;
       }
     }
@@ -963,22 +1007,23 @@ function buyCard(i){
   if(c.sold) return;
   if(c.kind==='weapon'){
     const w = WEAPONS[c.id];
-    if(P.gold < w.price){ shopMsg('Yeterli altın yok!'); return; }
+    const wp = weaponPrice(c.id);
+    if(P.gold < wp){ shopMsg('Yeterli altın yok!'); return; }
     const emptyA = P.arms.findIndex(a=>a===null);
     const emptyB = P.bench.findIndex(a=>a===null);
     if(emptyA !== -1){
-      P.gold -= w.price;
+      P.gold -= wp;
       P.arms[emptyA] = {type:c.id, lv:1, cdT:0, aim:armAngle(emptyA), uid:newUid(c.id)};
       shopMsg('');
     }else if(emptyB !== -1){
-      P.gold -= w.price;
+      P.gold -= wp;
       P.bench[emptyB] = {type:c.id, lv:1, cdT:0, aim:0, uid:newUid(c.id)};
       shopMsg('Yedek kola kondu — pasif, birleştirmede kullanılabilir.');
     }else{
       /* Her yer dolu: aynı türde Lv1 varsa (kol veya yedek) onu geliştirir */
       let ref = allRefs().find(r=>{ const it=getSlot(r); return it && it.type===c.id && it.lv===1; });
       if(!ref){ shopMsg('Tüm yuvalar dolu ve bu silah hiçbir şeyi geliştiremiyor!'); return; }
-      P.gold -= w.price;
+      P.gold -= wp;
       getSlot(ref).lv = 2;
       chainMerge(ref);
       /* Sonuç yedekte kaldıysa ve zincir bir kol boşalttıysa aktif kola taşı */
@@ -1105,7 +1150,7 @@ function dropOn(from, to){
     /* birleştir — sonuç aktif kolu tercih eder */
     const keep  = to.z==='a' ? to : (from.z==='a' ? from : to);
     const other = sameRef(keep, to) ? from : to;
-    getSlot(keep).lv += 1;
+    getSlot(keep).lv += 1; getSlot(keep).pol = Math.max(getSlot(keep).pol||0, getSlot(other).pol||0);
     setSlot(other, null);
     if(keep.z==='a') getSlot(keep).aim = armAngle(keep.i);
     shopMsg(`${WEAPONS[getSlot(keep).type].name} → Lv${getSlot(keep).lv} oldu!`);
@@ -1136,7 +1181,7 @@ function slotClick(ref){
       /* BİRLEŞTİR — sonuç aktif kolda kalmayı tercih eder */
       const keep  = (selectedRef.z==='a') ? selectedRef : (ref.z==='a' ? ref : selectedRef);
       const other = sameRef(keep, selectedRef) ? ref : selectedRef;
-      getSlot(keep).lv += 1;
+      getSlot(keep).lv += 1; getSlot(keep).pol = Math.max(getSlot(keep).pol||0, getSlot(other).pol||0);
       setSlot(other, null);
       shopMsg(`${WEAPONS[getSlot(keep).type].name} → Lv${getSlot(keep).lv} oldu!`);
       selectedRef = null;
@@ -1153,6 +1198,10 @@ function slotClick(ref){
   renderShop();
 }
 
+$('btnPolish').addEventListener('click', ()=>{
+  if(polishArm(selectedRef)) shopMsg('');
+  renderShop();
+});
 $('btnSell').addEventListener('click', ()=>{
   if(!selectedRef || !getSlot(selectedRef)) return;
   const it = getSlot(selectedRef);
@@ -1179,6 +1228,17 @@ $('btnReroll').addEventListener('click', ()=>{
   renderShop();
 });
 
+/* Kabuk Onarımı: 6+2·dalga altın = maks canın %25'i; market başına en çok 2 kez */
+function repairCost(){ return 6 + 2*P.wave; }
+function repairHp(){
+  if(P.repairs >= 2 || P.hp >= P.maxHp || P.gold < repairCost()) return false;
+  P.gold -= repairCost(); P.repairs++;
+  P.hp = Math.min(P.maxHp, P.hp + 0.25*P.maxHp);
+  shopMsg(`Kabuk onarıldı: can %${Math.round(P.hp/P.maxHp*100)}`);
+  renderShop();
+  return true;
+}
+$('btnRepair').addEventListener('click', repairHp);
 $('btnAutoMerge').addEventListener('click', ()=>{
   let merged = 0, again = true;
   const refs = allRefs();
@@ -1191,7 +1251,7 @@ $('btnAutoMerge').addEventListener('click', ()=>{
           /* Sonuç aktif kolda kalır */
           const keep  = (refs[i].z==='a') ? refs[i] : (refs[j].z==='a' ? refs[j] : refs[i]);
           const other = sameRef(keep, refs[i]) ? refs[j] : refs[i];
-          getSlot(keep).lv += 1;
+          getSlot(keep).lv += 1; getSlot(keep).pol = Math.max(getSlot(keep).pol||0, getSlot(other).pol||0);
           setSlot(other, null);
           merged++; again=true;
         }
@@ -1227,12 +1287,13 @@ function startWave(){
   waveDmg = {};
   paused = false;
   P.blindT = 0; P.bulutUsed = false; P.bulutT = 0;
+  P.wTaken = 0; P.heatLog.push(P.heat);
   P.shT = 0; P.shHit = false; P.shCd = Math.min(P.shCd, 6); P.mark = null;   // Kalkan beklemesi dalgalar arası taşınır (en çok 6 sn)
   _waveMsg = '';
   setPauseIcon();
   spawnQueue = buildSpawnQueue(P.wave);
   SY = computeSynergy();               // dalga boyunca sabit (kollar değişmiyor)
-  P.arms.forEach((a,i)=>{ if(a){ a.cdT = 0; a.boom = null; a.rampTgt = null; a.rampBonus = 0; a.bondM = bondMult(i); } });
+  P.arms.forEach((a,i)=>{ if(a){ a.cdT = 0; a.boom = null; a.rampTgt = null; a.rampBonus = 0; a.jamT = 0; a.jamBy = null; a.bondM = bondMult(i) * (1 + POLISH_PCT*(a.pol||0)); } });
   $('btnShield').style.display = 'block';
   if(P.wave === 1) queueTip('basic', 1.2, 9);
 
@@ -1248,10 +1309,12 @@ function startWave(){
 const SPAWN_TABLE = [
   {from:1,  w:{karides:35, yengec:65}},
   {from:3,  w:{karides:35, yengec:45, balon:20}},
-  {from:6,  w:{karides:30, yengec:38, balon:22, barakuda:10}},
-  {from:8,  w:{karides:24, yengec:31, balon:24, barakuda:13, okcu:8}},
-  {from:12, w:{karides:20, yengec:29, balon:17, barakuda:13, okcu:8, kaplumbaga:13}},
-  {from:16, w:{karides:18, yengec:24, balon:15, barakuda:13, okcu:8, kaplumbaga:11, denizanasi:11}}
+  {from:4,  w:{karides:30, yengec:38, balon:22, barakuda:10}},
+  {from:6,  w:{karides:28, yengec:34, balon:22, barakuda:10, okcu:6}},
+  {from:8,  w:{karides:24, yengec:30, balon:22, barakuda:12, okcu:8, kement:3}},
+  {from:9,  w:{karides:22, yengec:29, balon:22, barakuda:12, okcu:8, kement:5}},
+  {from:12, w:{karides:18, yengec:27, balon:16, barakuda:12, okcu:8, kaplumbaga:12, kement:6}},
+  {from:16, w:{karides:16, yengec:22, balon:14, barakuda:12, okcu:8, kaplumbaga:10, denizanasi:10, kement:6}}
 ];
 function spawnWeights(wave){
   let row = SPAWN_TABLE[0];
@@ -1272,16 +1335,32 @@ const AFFIX_INFO = {
   yenilenen: {name:'Yenilenen', color:'#7ee08a'}
 };
 
+/* Baskın (flank burst): dalga ≥4 (boss dalgası hariç) 8–16. sn'de bir yönden, 1,0 sn telegraflı ani akın;
+   dalga ≥15'te ikinci baskın. Düşman sayısı normal bütçeden DÜŞÜLÜR (toplam can aynı kalır). */
+let flankList = [];
+const FLANK_ARC = 70;
+function planFlanks(wave, slots){
+  const out = [];
+  if(wave < 4 || wave % 5 === 0) return out;
+  const n = Math.max(4, Math.round(0.18*slots));
+  out.push({t: 8 + Math.random()*8, n, ang: Math.random()*Math.PI*2, warned:false, done:false});
+  if(wave >= 12) out.push({t: 20 + Math.random()*6, n, ang: Math.random()*Math.PI*2, warned:false, done:false});
+  return out;
+}
 function buildSpawnQueue(wave){
   /* enemyCount "slot" sayısıdır; elit 2 slot tüketir. Zaman slot sırasına göre yayılır. */
   const q = [];
-  const slots = enemyCount(wave), ec = eliteChance(wave), wt = spawnWeights(wave);
+  let slots = Math.round(enemyCount(wave) * heatCount());
+  const ec = eliteChance(wave), wt = spawnWeights(wave);
+  flankList = planFlanks(wave, slots);
+  for(const f of flankList) slots -= f.n;
   let used = 0;
   while(used < slots){
     const type = pickWeighted(wt);
     const elite = ec > 0 && slots - used >= 2 && Math.random() < ec;
     const affix = (elite && wave >= 15) ? AFFIXES[Math.floor(Math.random()*AFFIXES.length)] : null;
-    q.push({t: (used/slots)*(WAVE_DURATION-6)+0.5, type, elite, affix});
+    /* boş menzil zamanını kes: dalganın ilk 4 düşmanı ARENA_R'nin %55'inde doğar (sonrakiler uzaktan) */
+    q.push({t: (used/slots)*(WAVE_DURATION-6)+0.5, type, elite, affix, near: q.length < 4});
     used += elite ? 2 : 1;
   }
   return q;
@@ -1293,11 +1372,11 @@ function makeEnemy(type, o){
   const base = ENEMY_TYPES[type];
   let x = o.x, y = o.y;
   if(x == null){
-    const ang = Math.random()*Math.PI*2, R = ARENA_R * S;
+    const ang = Math.random()*Math.PI*2, R = ARENA_R * S * (o.near ? 0.55 : (o.Rm || 1));
     x = CX + Math.cos(ang)*R; y = CY + Math.sin(ang)*R;
   }
   const m = o.mul || 1;
-  let hp = base.hp*hpMul(P.wave)*m, dmg = base.dmg*dmgMul(P.wave), gold = base.gold;
+  let hp = base.hp*hpMul(P.wave)*m*(base.boss ? 1 : heatHp()), dmg = base.dmg*dmgMul(P.wave), gold = base.gold;
   let r = base.r, kbRes = base.kbRes, speed = base.speed, armor = base.armor || 0;
   let stunRes = base.boss ? 0.25 : 1, regen = 0;
   const elite = !!o.elite && !base.boss;
@@ -1323,7 +1402,7 @@ function makeEnemy(type, o){
     tickAcc:0, tickT:0,
     /* davranış durumu */
     ph:0, phT:0, dashCd:0, shotT:1.0, shots:0, stopU: base.ranged ? base.ranged.stop : 0,
-    fled:false, fleeT:0, cdMul:1, telT:0, dealt:0, summoner: o.summoner || null
+    fled:false, fleeT:0, cdMul:1, telT:0, dealt:0, lassoCd:2.0, lassoArm:null, summoner: o.summoner || null
   };
 }
 function spawnEnemy(type, o){
@@ -1376,8 +1455,8 @@ function dmgFactor(){ return (1 + P.trk.dmg) * (hasPerk('basinc') ? 1.12 : 1); }
 function atkSpeed(){ return 1 + P.trk.spd + (hasPerk('refleks') ? 0.10 : 0); }
 function critChance(){ return P.trk.crit + (hasPerk('keskin') ? 0.08 : 0); }
 function critMult(){ return hasPerk('keskin') ? 2.1 : CRIT_MULT; }
-function dotMult(){ return hasPerk('asitKan') ? 1.6 : 1; }
-function takenMult(){ return (1 - (P.trk.guard||0)) * (hasPerk('kitin') ? 0.88 : 1); }
+function dotMult(){ return hasPerk('asitKan') ? 1.8 : 1; }
+function takenMult(){ return (1 - (P.trk.guard||0)) * (hasPerk('kitin') ? 0.85 : 1); }
 function rangeMul(){ return P.blindT > 0 ? 0.75 : 1; }        // Mürekkep Körlüğü
 function weaponRange(w){ return (w.range + rangeBonus()) * S * rangeMul(); }
 /* Hasar kaynağı anahtarı: sayı → silah örneği uid'i, metin → özel kaynak (ör. 'bulut') */
@@ -1387,24 +1466,28 @@ function srcKey(src, fallback){
 }
 
 /* Ahtapota hasar: tüm kaynaklar (temas, düşman mermisi, hücum) buradan geçer */
+/* Kalkan açıksa saldırıyı yutar (true). İlk yutulan vuruş = başarılı savuş → bekleme iadesi (+Sığınak sersemletmesi). */
+function shieldAbsorb(src, amt){
+  if(!(P.shT > 0)) return false;
+  P.shBlocked++;
+  if(src && typeof src === 'object'){ src.blocked = (src.blocked||0) + 1; src.blockedDmg = (src.blockedDmg||0) + (amt||0); }   // ölçüm: boss saldırısı ulaştı ama yutuldu
+  if(!P.shHit){
+    P.shHit = true; P.parries++;
+    P.shCd = Math.max(0, P.shCd - SHIELD_REFUND*P.shMax);
+    effects.push({kind:'parry', x:CX, y:CY, t:0.35, r:BODY_R*S*2.2});
+    if(hasPerk('siginak')){
+      for(const e of enemies)
+        if(e.hp>0 && Math.hypot(e.x-CX, e.y-CY) <= 110*S + e.r) e.stunT = Math.max(e.stunT, 0.6*e.stunRes);
+    }
+  }
+  return true;
+}
 /* src: düşman nesnesi ya da kaynak adı (ölçüm: P.taken). Dönüş: hasar gerçekten işlendi mi (kalkan = false) */
 function hurtPlayer(amount, src){
   if(!(amount > 0)) return false;
-  if(P.shT > 0){                              // Kabuk Kalkanı: tüm hasarı yutar
-    P.shBlocked++;
-    if(!P.shHit){                             // ilk yutulan vuruş = başarılı savuş → bekleme iadesi
-      P.shHit = true; P.parries++;
-      P.shCd = Math.max(0, P.shCd - SHIELD_REFUND*P.shMax);
-      effects.push({kind:'parry', x:CX, y:CY, t:0.35, r:BODY_R*S*2.2});
-      if(hasPerk('siginak')){                 // Sığınak: savuşta çevredekiler 0,6 sn sersemler
-        for(const e of enemies)
-          if(e.hp>0 && Math.hypot(e.x-CX, e.y-CY) <= 110*S + e.r) e.stunT = Math.max(e.stunT, 0.6*e.stunRes);
-      }
-    }
-    return false;
-  }
+  if(shieldAbsorb(src, amount * takenMult())) return false;            // Kabuk Kalkanı: tüm hasarı yutar
   const d = amount * takenMult();
-  P.hp -= d;
+  P.hp -= d; P.wTaken += d;
   const key = !src ? '?' : (typeof src === 'string' ? src : src.type);
   P.taken[key] = (P.taken[key] || 0) + d;
   if(src && typeof src === 'object') src.dealt = (src.dealt || 0) + d;
@@ -1442,7 +1525,7 @@ function markAt(x, y){
 }
 function markedIn(range){
   const m = P.mark;
-  return (m && m.hp > 0 && inRangeC(m, range)) ? m : null;
+  return (m && m.hp > 0 && !(m.invulT > 0) && inRangeC(m, range)) ? m : null;
 }
 function pickTarget(range, prio){
   return markedIn(range) || (prio ? targetEnemyC(range) : nearestEnemyC(range));
@@ -1506,6 +1589,7 @@ function hitEnemy(e, raw, w, o){
     d *= t>=2 ? 1.35 : t>=1 ? 1.15 : 1;
   }
   if(hasCls(w,'Ates') && tier('Ates')>=2 && e.burn && e.burn.t>0) d *= 1.10;
+  if(hasCls(w,'Uzun')){ const t = tier('Uzun'); d *= t>=2 ? 1.15 : t>=1 ? 1.08 : 1; }
 
   const inkM  = (e.inkT>0 && w.id!=='murekkep') ? 1.20 : 1;
   const ctrlM = (tier('Kontrol')>=2 && (e.stunT>0 || e.slowT>0 || e.inkT>0)) ? 1.15 : 1;
@@ -1603,6 +1687,12 @@ function fireArms(dt){
        Hedef yokken negatif birikmez (0'da tutulur) → hedef gelince seri patlama olmaz. */
     a.cdT -= dt;
     const idle = ()=>{ if(a.cdT < 0) a.cdT = 0; };
+    /* Kement ağı: kol kilitli (ateş etmez); atan Kement ölünce çözülür */
+    if(a.jamT > 0){
+      a.jamT -= dt;
+      if(a.jamBy && a.jamBy.hp <= 0) a.jamT = 0;
+      if(a.jamT > 0){ idle(); continue; }
+    }
 
     /* Bumerang: aktifken yenisini atmaz */
     if(w.kind==='boomerang'){
@@ -1772,12 +1862,42 @@ function walkOrAttack(e, dt, dist, dx, dy, contact, spd){
   else contactAttack(e, dt);
 }
 /* Sersemletme atılma/hücum gibi hazırlıkları iptal eder */
+/* Kement Balığı: 260'ta durur, 0,5 sn telegraf (çizgi + kol ucunda halka), sonra rastgele dolu bir kolu 4 sn bağlar (8 sn arayla).
+   Kalkan açıksa ağ boşa gider (savuş sayılır). Çözüm: Kement'i öldür (Odak İşareti!). */
+function behLasso(e, dt, dist, dx, dy, contact, spd){
+  const L = e.def.lasso, stopD = L.stop*S + e.r;
+  if(dist > stopD + 0.5){
+    stepToward(e, dist, dx, dy, spd, dt, stopD);
+    e.atkT = 0.5; e.telT = 0;
+    return;
+  }
+  e.lassoCd -= dt;
+  if(e.lassoCd > 0 && e.lassoCd <= L.tele){
+    if(e.lassoArm == null){
+      const c = []; P.arms.forEach((a,i)=>{ if(a && !(a.jamT > 0)) c.push(i); });
+      e.lassoArm = c.length ? c[Math.floor(Math.random()*c.length)] : null;
+    }
+    e.telT = e.lassoArm == null ? 0 : e.lassoCd;
+  }
+  if(e.lassoCd <= 0){
+    e.telT = 0;
+    const ai = e.lassoArm; e.lassoArm = null; e.lassoCd = L.cd;
+    const a = ai != null ? P.arms[ai] : null;
+    if(a){
+      if(shieldAbsorb()){ /* ağ kalkana takıldı */ }
+      else { a.jamT = L.jam; a.jamBy = e; const tp = armTip(ai); effects.push({kind:'net', x:tp.x, y:tp.y, t:0.5, r:16*S}); }
+    }
+  }
+  if(dist <= contact) contactAttack(e, dt);
+}
+
 function interruptEnemy(e){
   if(e.beh==='dash' && e.ph>0){ e.ph = 0; e.dashCd = e.def.dash.cd; }
   if(e.beh==='shark' && e.ph>0){ e.ph = 0; e.chargeCd = 2*e.cdMul; }
   if(e.beh==='ranged' && e.ph>0){ e.ph = 0; e.shotT = Math.max(e.shotT, 0.8); }
-  if(e.telT > 0){                              // kalamar/fener telegrafı bozulur
+  if(e.telT > 0){                              // kalamar/fener/kement telegrafı bozulur
     e.telT = 0;
+    if(e.beh==='lasso'){ e.lassoCd = Math.max(e.lassoCd, 1.0); e.lassoArm = null; }
     if(e.beh==='squid') e.inkCd = Math.max(e.inkCd, 0.9);
     if(e.beh==='angler') e.lightCd = Math.max(e.lightCd, 0.9);
   }
@@ -1843,13 +1963,15 @@ function behRanged(e, dt, dist, dx, dy, contact, spd){
 
 /* ---------- Bosslar (her 5. dalgada dönüşümlü; dalga 25+ Öfkeli) ---------- */
 const BOSS_ORDER = ['boss','yengecKral','kalamar','fener'];
+const BOSS_HP0 = 1.0;                      // boss can çarpanı tabanı (eski 0,8)
 const KC_THR = [0.75, 0.50, 0.25];         // Yengeç Kral kabuk eşikleri
 function spawnBoss(){
-  /* Boss gücü döngüyle artar: bMul = 0,8 + 0,06(k-1); hasar bMul ALMAZ (yalnız dmgMul) */
+  /* Boss gücü döngüyle artar: bMul = BOSS_HP0 + 0,10(k-1); hasar bMul ALMAZ (yalnız dmgMul).
+     Boss ARENA_R'nin %62'sinde doğar: ahtapota gerçekten ulaşabilsin (kontrol tek başına kilitleyemez). */
   const k = Math.max(1, Math.round(P.wave/5));
   const type = BOSS_ORDER[(k-1) % BOSS_ORDER.length];
-  const bMul = 0.8 + 0.06*(k-1);
-  const b = spawnEnemy(type, {mul:bMul});
+  const bMul = BOSS_HP0 + 0.10*(k-1);
+  const b = spawnEnemy(type, {mul:bMul, Rm: type==='yengecKral' ? 0.75 : 0.8});
   b.gold = Math.round(30 * k);
   b.enraged = P.wave >= 25;                // ikinci döngü: hız ×1,2, bekleme süreleri ×0,75
   if(b.enraged){ b.speed *= 1.2; b.cdMul = 0.75; }
@@ -1869,7 +1991,7 @@ function summonAround(boss, type, n, radiusU, gold){
   }
 }
 function bossOnDamaged(e){
-  /* Yengeç Kral: %75/%50/%25 eşiğini geçince 1,5 sn dokunulmaz + 4 yengeç çağırır.
+  /* Yengeç Kral: %75/%50/%25 eşiğini geçince 1,5 sn dokunulmaz + 3 yengeç çağırır.
      Tek büyük vuruş birden fazla eşiği atlayamaz (can eşikte tutulur). */
   if(e.beh==='kingcrab' && e.thrIdx < KC_THR.length && e.invulT <= 0){
     const thr = KC_THR[e.thrIdx]*e.maxHp;
@@ -1877,7 +1999,7 @@ function bossOnDamaged(e){
       e.hp = Math.max(e.hp, thr*0.999);
       e.thrIdx++;
       e.invulT = 1.5;
-      summonAround(e, 'yengec', 4, 40, 1);
+      summonAround(e, 'yengec', 3, 40, 1);
       effects.push({kind:'shell', x:e.x, y:e.y, t:0.5, r:e.r*1.8});
       shake(5, 0.25);
     }
@@ -1920,7 +2042,7 @@ function behShark(e, dt, dist, dx, dy, contact, spd){
 function squidInk(e){
   const base = Math.atan2(CY-e.y, CX-e.x);
   for(let i=-2;i<=2;i++)
-    fireEnemyShot(e.x, e.y, base + i*rad(10), 180*S, 0.5*e.dmg*weakenF(e), 6*S, 'ink', e);
+    fireEnemyShot(e.x, e.y, base + i*rad(8), 180*S, 0.8*e.dmg*weakenF(e), 6*S, 'ink', e);
   effects.push({kind:'inkpuff', x:e.x, y:e.y, t:0.4, r:e.r*1.3});
 }
 function behSquid(e, dt, dist, dx, dy, contact, spd){
@@ -2053,13 +2175,14 @@ function updateEnemies(dt, overtime){
     let spd = e.speed * (e.slowT>0 ? (1-e.slowPct) : 1) * (e.buffT>0 ? 1.2 : 1);
     /* 90 sn güvencesi: boss dışı herkes ×2 hız ve düz yürür (durmalı yapılar dalgayı kilitlemesin) */
     let beh = e.beh;
-    if(overtime && !e.isBoss){ spd *= 2; if(beh==='ranged') beh = null; }
+    if(overtime && !e.isBoss){ spd *= 2; if(beh==='ranged' || beh==='lasso') beh = null; }
     switch(beh){
       case 'dash':     behDash(e, dt, dist, dx, dy, contact, spd); break;
       case 'ranged':   behRanged(e, dt, dist, dx, dy, contact, spd); break;
       case 'shark':    behShark(e, dt, dist, dx, dy, contact, spd); break;
       case 'squid':    behSquid(e, dt, dist, dx, dy, contact, spd); break;
       case 'angler':   behAngler(e, dt, dist, dx, dy, contact, spd); break;
+      case 'lasso':    behLasso(e, dt, dist, dx, dy, contact, spd); break;
       default:         walkOrAttack(e, dt, dist, dx, dy, contact, spd);
     }
   }
@@ -2096,11 +2219,28 @@ function updateWave(dt){
   if(P.trk.regen > 0 && P.hp > 0) P.hp = Math.min(P.maxHp, P.hp + P.maxHp*0.004*P.trk.regen*dt);
   updateBulut(dt);
 
+  /* Baskınlar: telegraf (1 sn) → yaydan ani doğuş */
+  for(const f of flankList){
+    const el = WAVE_DURATION - waveT;
+    if(!f.warned && el >= f.t - 1.0){
+      f.warned = true;
+      effects.push({kind:'flank', ang:f.ang, t:1.0});
+      queueTip('flank', 0.05, 6);
+    }
+    if(!f.done && el >= f.t){
+      f.done = true;
+      const wt = spawnWeights(P.wave), half = rad(FLANK_ARC/2);
+      for(let i=0;i<f.n && enemies.length < MAX_ENEMIES;i++){
+        const a = f.ang + (Math.random()*2-1)*half, Rr = ARENA_R*S*0.6;
+        spawnEnemy(pickWeighted(wt), {x:CX + Math.cos(a)*Rr, y:CY + Math.sin(a)*Rr});
+      }
+    }
+  }
   /* Kuyruk: aynı anda en fazla MAX_ENEMIES düşman (fazlası sırada bekler) */
   while(spawnIdx < spawnQueue.length && (WAVE_DURATION - waveT) >= spawnQueue[spawnIdx].t &&
         enemies.length < MAX_ENEMIES){
     const q = spawnQueue[spawnIdx];
-    spawnEnemy(q.type, {elite:q.elite, affix:q.affix});
+    spawnEnemy(q.type, {elite:q.elite, affix:q.affix, near:q.near});
     spawnIdx++;
   }
 
@@ -2198,11 +2338,11 @@ function updateWave(dt){
   const born = [];
   for(const e of enemies){
     if(e.hp <= 0){
-      earnGold(e.gold);
+      earnGold(e.gold * heatGold());
       P.kills++;
       if(e.isBoss) logBoss(e, false);
       if(hasPerk('kanEmici') && P.hp > 0)
-        P.hp = Math.min(P.maxHp, P.hp + (e.isBoss ? 20 : e.elite ? 4 : 1));
+        P.hp = Math.min(P.maxHp, P.hp + P.maxHp*(e.isBoss ? 0.15 : e.elite ? 0.02 : 0.004));
       effects.push({kind:'pop', x:e.x, y:e.y, t:0.3, r:e.r});
       for(const p of projectiles)
         if(p.kind==='boomerang') p.hitSet.delete(e);
@@ -2246,7 +2386,7 @@ function updateWave(dt){
 
   /* Bitiş: süre dolsa bile TÜM düşmanlar ölmeden tur bitmez */
   const bossDone = (P.wave % 5 !== 0) || bossSpawned;
-  const cleared = spawnIdx >= spawnQueue.length && enemies.length === 0 && bossDone;
+  const cleared = spawnIdx >= spawnQueue.length && enemies.length === 0 && bossDone && flankList.every(f=>f.done);
   /* Aynı karede son düşman ölüp can da bitiyorsa tur kazanılmış sayılır (kill altını zaten verildi) */
   if(P.hp <= 0 && !cleared){ gameOver(); return; }
   if(cleared){
@@ -2271,9 +2411,11 @@ let _hudLbl = null, _hudVal = null, _bossOn = false;
 function updateWaveHud(overtime){
   const el = WAVE_DURATION - waveT;
   const bossPending = P.wave % 5 === 0 && !bossSpawned;
+  const flankPending = flankList.some(f=>!f.done);
   let lbl, val;
-  if(spawnIdx < spawnQueue.length || bossPending){
+  if(spawnIdx < spawnQueue.length || bossPending || flankPending){
     let end = spawnQueue.length ? spawnQueue[spawnQueue.length-1].t : 0;
+    for(const f of flankList) if(!f.done) end = Math.max(end, f.t);
     if(bossPending) end = Math.max(end, WAVE_DURATION - BOSS_AT);
     lbl = '⏳';
     val = Math.max(0, Math.ceil(end - el));
@@ -2294,7 +2436,7 @@ function updateWaveHud(overtime){
 function logBoss(e, alive){
   const reach = e.minD <= BODY_R*S + e.r + 4*S;
   P.bossLog.push({wave:P.wave, type:e.type, life:+e.age.toFixed(1), minD:Math.round(e.minD/S), reach,
-                  dealt:Math.round(e.dealt||0), alive:!!alive});
+                  dealt:Math.round(e.dealt||0), blocked:e.blocked||0, blockedDmg:Math.round(e.blockedDmg||0), alive:!!alive});
 }
 
 function dmgName(id){
@@ -2337,7 +2479,15 @@ function endWave(){
   const done = P.wave;
   let reward = 8 + P.wave*2;
   P.gold += reward; P.totalGold += reward;
-  P.hp = P.maxHp;                       // yeni rounda tam canla başlanır
+  /* Kalıcı hasar: dalga 1–5 tam can; sonra eksik canın yarısı + maks canın %5'i dönüş (kalanı onarımla/yenilenmeyle) */
+  if(done <= 5) P.hp = P.maxHp;
+  else { const h = Math.max(1, P.hp); P.hp = Math.min(P.maxHp, h + (P.maxHp - h)*0.7 + P.maxHp*0.08); }
+  P.repairs = 0;
+  /* Kızışan Sular güncellemesi: temiz dalga +1, ağır hasar −1 (boss dalgası da sayılır) */
+  if(done % 5 !== 0 && done >= 5){
+    if(P.wTaken <= HEAT_CLEAN*P.maxHp) P.heat = Math.min(HEAT_MAX, P.heat + 1, 1 + Math.floor(Math.max(0, done + 1 - 5)/3));
+    else if(P.wTaken >= HEAT_HURT*P.maxHp) P.heat = Math.max(0, P.heat - 1);
+  }
   P.wave += 1;
   /* Dalga hasar raporu — silah ÖRNEĞİ bazlı, etiketler şimdi çözümlenir
      (sonradan birleşse/satılsa bile rapor doğru kalır) */
@@ -2349,7 +2499,7 @@ function endWave(){
   document.body.classList.remove('bossOn'); _bossOn = false;
   rollShop(false);
   openShop();
-  _waveMsg = `Dalga tamamlandı! +${reward}💰 — can tamamen yenilendi ❤️`;
+  _waveMsg = `Dalga tamamlandı! +${reward}💰 — ` + (done <= 5 ? 'can tamamen yenilendi ❤️' : `can %${Math.round(P.hp/P.maxHp*100)} ❤️ (onarabilirsin)`);
   shopMsg(_waveMsg);
   if(done >= 10 && done % 5 === 0) offerMutations(done);
 }
@@ -2388,6 +2538,8 @@ function clearBanners(){ bannerQ = []; bannerCur = null; $('banner').className =
 function waveBanners(){
   clearBanners();
   const z = zoneIdx(P.wave);
+  if(P.heat > 0 && heatOn() && (P.wave < 2 || P.heatLog[P.heatLog.length-2] !== P.heat))
+    queueBanner(`🔥 KIZIŞAN SULAR ${'▲'.repeat(P.heat)}`, `Bu dalga: düşman +%${Math.round((heatCount()-1)*100)}, can +%${Math.round((heatHp()-1)*100)}, altın +%${Math.round((heatGold()-1)*100)}`, 2.2);
   if(P.wave > 1 && z !== zoneIdx(P.wave-1))
     queueBanner(`🌊 ${ZONES[z].name.toLocaleUpperCase('tr')} — ${depthOf(P.wave)}\u00a0m`,
                 z===1 ? 'Elit düşmanlar başlıyor' : z===3 ? 'Sert duvar: sular çok daha tehlikeli' : 'Karanlık derinleşiyor', 2.5, 'zone');
@@ -3700,6 +3852,23 @@ const ECHAR = {
     c.fillStyle='#14100a'; c.beginPath(); c.arc(.54*r,-.22*r,.1*r,0,7); c.fill();
     c.fillStyle='rgba(255,255,255,.9)'; c.beginPath(); c.arc(.57*r,-.27*r,.04*r,0,7); c.fill();
   },
+  kement(c,r,t){
+    const sw = Math.sin(t*5)*0.18;
+    c.save(); c.translate(-.8*r,0); c.rotate(sw);
+    c.beginPath(); c.moveTo(0,0); c.lineTo(-.55*r,-.42*r); c.lineTo(-.38*r,0); c.lineTo(-.55*r,.42*r); c.closePath();
+    c.fillStyle='#6b4a2b'; c.fill(); c.strokeStyle='rgba(30,18,8,.7)'; c.lineWidth=.06*r; c.stroke(); c.restore();
+    c.beginPath(); c.ellipse(0,0,.9*r,.58*r,0,0,7);
+    const g = c.createLinearGradient(0,-.58*r,0,.58*r);
+    g.addColorStop(0,'#b08a55'); g.addColorStop(.6,'#7a5a34'); g.addColorStop(1,'#4d3a22');
+    c.fillStyle=g; c.fill(); c.strokeStyle='rgba(30,18,8,.8)'; c.lineWidth=.07*r; c.stroke();
+    c.strokeStyle='rgba(30,18,8,.45)'; c.lineWidth=.05*r;
+    for(const x of [-.3,0,.3]){ c.beginPath(); c.moveTo(x*r,-.5*r); c.quadraticCurveTo((x+.1)*r,0,x*r,.5*r); c.stroke(); }
+    c.strokeStyle='#e0cc96'; c.lineWidth=.1*r; c.lineCap='round';
+    c.beginPath(); c.moveTo(.75*r,.1*r); c.quadraticCurveTo(1.45*r,.45*r+Math.sin(t*3)*.15*r,1.1*r,.95*r); c.stroke();
+    c.beginPath(); c.arc(1.1*r,1.12*r,.26*r,0,7); c.stroke();
+    c.fillStyle='#fff'; c.beginPath(); c.arc(.45*r,-.16*r,.16*r,0,7); c.fill();
+    c.fillStyle='#14100a'; c.beginPath(); c.arc(.49*r,-.16*r,.09*r,0,7); c.fill();
+  },
   kaplumbaga(c,r,t){
     const fl = Math.sin(t*2.6)*0.4;
     // yüzgeçler
@@ -4107,6 +4276,14 @@ function drawOctopus(){
         WICON[a.type](ctx, 12.5*S);
         ctx.restore();
       }
+      /* Kement ağı: kol kilitli */
+      if(a.jamT > 0){
+        ctx.save(); ctx.translate(tip.x, tip.y);
+        ctx.strokeStyle = '#e0cc96'; ctx.lineWidth = 2.2*S; ctx.globalAlpha = 0.9;
+        ctx.beginPath(); ctx.arc(0, 0, 15*S, 0, 7); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(-10*S,-10*S); ctx.lineTo(10*S,10*S); ctx.moveTo(10*S,-10*S); ctx.lineTo(-10*S,10*S); ctx.stroke();
+        ctx.restore();
+      }
       /* seviye noktaları (Lv2+) */
       if(a.lv > 1){
         const n = Math.min(a.lv-1, 4);
@@ -4215,10 +4392,21 @@ function drawEnemy(e, t){
       ctx.beginPath(); ctx.moveTo(e.x, e.y); ctx.lineTo(CX, CY); ctx.stroke();
       ctx.fillStyle = 'rgba(255,70,70,.35)';
       ctx.beginPath(); ctx.arc(e.x, e.y, e.r*VIS*(1.15 + 0.2*k), 0, 7); ctx.fill();
+    }else if(e.beh==='lasso'){
+      /* kement: hedef kol ucuna kırmızı çizgi + halka */
+      if(e.lassoArm != null && P.arms[e.lassoArm]){
+        const tp = armTip(e.lassoArm);
+        ctx.globalAlpha = 0.5 + 0.4*k; ctx.strokeStyle = '#ff3b3b'; ctx.lineWidth = 2.4*S; ctx.setLineDash([8*S, 6*S]);
+        ctx.beginPath(); ctx.moveTo(e.x, e.y); ctx.lineTo(tp.x, tp.y); ctx.stroke(); ctx.setLineDash([]);
+        ctx.strokeStyle = '#fff'; ctx.lineWidth = 0.9*S;
+        ctx.beginPath(); ctx.moveTo(e.x, e.y); ctx.lineTo(tp.x, tp.y); ctx.stroke();
+        ctx.strokeStyle = '#ff3b3b'; ctx.lineWidth = 2.6*S;
+        ctx.beginPath(); ctx.arc(tp.x, tp.y, 17*S*(1.1 - 0.2*k), 0, 7); ctx.stroke();
+      }
     }else{
       /* okçu: tek ince nişan çizgisi · kalamar: 5'li yelpaze · fener: 3'lü yelpaze */
       const base = Math.atan2(CY-e.y, CX-e.x), L = Math.hypot(CX-e.x, CY-e.y);
-      const n = e.beh==='squid' ? 2 : e.beh==='angler' ? 1 : 0, step = rad(e.beh==='squid' ? 10 : 11);
+      const n = e.beh==='squid' ? 2 : e.beh==='angler' ? 1 : 0, step = rad(e.beh==='squid' ? 8 : 11);
       for(let q=-n;q<=n;q++){
         const a = base + q*step, x2 = e.x + Math.cos(a)*L*1.05, y2 = e.y + Math.sin(a)*L*1.05;
         ctx.globalAlpha = 0.5 + 0.4*k;
@@ -4533,6 +4721,25 @@ function drawEntities(){
       const g = ctx.createRadialGradient(fx.x, fx.y, fx.r*0.1, fx.x, fx.y, fx.r*1.4);
       g.addColorStop(0,'rgba(60,30,110,.1)'); g.addColorStop(.6,'rgba(70,35,130,.9)'); g.addColorStop(1,'rgba(40,20,80,0)');
       ctx.fillStyle=g; ctx.beginPath(); ctx.arc(fx.x, fx.y, fx.r*1.4, 0, 7); ctx.fill();
+    }else if(fx.kind==='flank'){
+      const k = fx.t/1.0, nw = performance.now(), half = rad(FLANK_ARC/2);
+      const Rr = Math.min(W, H)*0.44;
+      ctx.save();
+      ctx.globalAlpha = 0.45 + 0.4*Math.abs(Math.sin(nw/90));
+      ctx.fillStyle = 'rgba(255,59,59,.14)';
+      ctx.beginPath(); ctx.moveTo(CX, CY); ctx.arc(CX, CY, Rr, fx.ang-half, fx.ang+half); ctx.closePath(); ctx.fill();
+      ctx.strokeStyle = '#ff3b3b'; ctx.lineWidth = 5*S; ctx.setLineDash([16*S, 9*S]);
+      ctx.beginPath(); ctx.arc(CX, CY, Rr, fx.ang-half, fx.ang+half); ctx.stroke(); ctx.setLineDash([]);
+      ctx.strokeStyle = '#fff'; ctx.lineWidth = 1.4*S;
+      ctx.beginPath(); ctx.arc(CX, CY, Rr, fx.ang-half, fx.ang+half); ctx.stroke();
+      ctx.restore();
+      for(const o of [-half*0.7, 0, half*0.7]) drawEdgeArrow(CX + Math.cos(fx.ang+o)*2000, CY + Math.sin(fx.ang+o)*2000, 1.15, nw);
+    }else if(fx.kind==='net'){
+      const k = fx.t/0.5;
+      ctx.globalAlpha = k; ctx.strokeStyle = '#e0cc96'; ctx.lineWidth = 2.5*S;
+      for(let q=0;q<6;q++){ const a = q*Math.PI/3;
+        ctx.beginPath(); ctx.moveTo(fx.x, fx.y); ctx.lineTo(fx.x+Math.cos(a)*fx.r*(2-k), fx.y+Math.sin(a)*fx.r*(2-k)); ctx.stroke(); }
+      ctx.beginPath(); ctx.arc(fx.x, fx.y, fx.r*(2-k)*0.6, 0, 7); ctx.stroke();
     }else if(fx.kind==='shield'){
       const k = fx.t/SHIELD_DUR, nw = performance.now();
       ctx.globalAlpha = 0.25 + 0.55*Math.min(1, k*3);
@@ -4656,6 +4863,7 @@ window.addEventListener('keydown', ev=>{
   if(ev.repeat || state !== WAVE_STATE) return;
   if(ev.code === 'Space' || ev.code === 'KeyQ'){ ev.preventDefault(); useShield(); }
 });
+window.addEventListener('keyup', ev=>{ if(ev.code === 'Space' && state === WAVE_STATE) ev.preventDefault(); });   // odaktaki düğme tetiklenmesin
 cv.addEventListener('pointerdown', ev=>{
   if(ev.button !== undefined && ev.button !== 0) return;
   markAt(ev.clientX, ev.clientY);
@@ -4665,6 +4873,7 @@ const TIP_KEY = 'octoShooter.tips.v1';
 const TIPS = {
   basic:  'Bir düşmana <b>dokun</b>: kollar önce onu vurur. <b>Q / Boşluk</b> ya da <b>kalkan düğmesi</b>: 1 sn hasar yutar.',
   tele:   '<b>Kırmızı çizgi</b> = saldırı geliyor! Çarpmadan hemen önce <b>kalkanı</b> aç.',
+  flank:  '<b>Kırmızı yay</b>: o yönden baskın geliyor! Kolların önce oraya döner.',
   parry:  'Savuş! Başarılı kalkan beklemeyi <b>%35</b> kısalttı.'
 };
 function tipSeen(k){ try{ const o = JSON.parse(localStorage.getItem(TIP_KEY)||'{}'); return !!o[k]; }catch(e){ return false; } }

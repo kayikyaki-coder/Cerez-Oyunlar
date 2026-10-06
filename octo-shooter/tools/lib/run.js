@@ -38,7 +38,7 @@ function runOne(env, job){
   const rec = {
     strategy: job.cheat ? 'hileli' : botName, bot: botName, run: runIdx, seed, cheat: !!job.cheat,
     startWave: 1, deathWave: null, reachedCap: false,
-    waves: [], waveTaken: [], inGameSec: 0, shopSec: 0, estRealSec: 0,
+    waves: [], waveTaken: [], waveSrc: [], waveBlocked: [], heatLog: [], inGameSec: 0, shopSec: 0, estRealSec: 0,
     totalGold: 0, kills: 0, spent: 0, rerolls: 0, sold: 0, merges: 0,
     bought: {}, dmgByType: {}, dmgShare: {}, synergies: {}, finalBuild: null,
     goldAfterShop: {}, mutations: [], lastWaveTopShare: null, lastWaveTopKey: null,
@@ -77,7 +77,7 @@ function runOne(env, job){
     try { A.fn('startWave')(); }
     catch(e){ rec.errors.push(`startWave(w${w}): ${errLine(e)}`); break; }
     let t = 0;
-    const tk0 = takenSum();
+    const tk0 = takenSum(), bl0 = A.g('P').shBlocked || 0, src0 = Object.assign({}, A.g('P').taken || {});
     while(true){
       let n;
       try { n = A.stepWave(dt, CHUNK, input); }
@@ -107,6 +107,8 @@ function runOne(env, job){
     }
     rec.waves.push(+t.toFixed(3));
     rec.waveTaken.push(+(takenSum() - tk0).toFixed(2));
+    rec.waveBlocked.push((A.g('P').shBlocked || 0) - bl0);
+    { const o = {}, tk = A.g('P').taken || {}; for(const k in tk){ const d = tk[k] - (src0[k] || 0); if(d > 0.5) o[k] = Math.round(d); } rec.waveSrc.push(o); }
     rec.inGameSec += t;
     let st = A.state();
     if(st === GAMEOVER_STATE){ rec.deathWave = w; break; }
@@ -130,6 +132,7 @@ function runOne(env, job){
   const P = A.g('P');
   for(const k in (P.taken || {})) rec.taken[k] = Math.round(P.taken[k]);
   rec.bossLog = (P.bossLog || []).map(b => Object.assign({}, b));
+  rec.heatLog = (P.heatLog || []).slice();
   rec.parries = P.parries || 0; rec.shUses = P.shUses || 0; rec.shBlocked = P.shBlocked || 0;
   rec.totalGold = P.totalGold;
   rec.kills = P.kills;
